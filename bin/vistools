@@ -1,0 +1,33 @@
+#!/bin/bash
+# vistools launcher — detects platform and runs the correct binary
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BIN_DIR="$SCRIPT_DIR"
+
+# Detect platform
+OS="$(uname -s)"
+ARCH="$(uname -m)"
+
+case "$OS" in
+  Darwin)
+    if [ "$ARCH" = "arm64" ]; then
+      BINARY="$BIN_DIR/vistools-macos-arm64"
+    else
+      BINARY="$BIN_DIR/vistools-macos-x64"
+    fi
+    ;;
+  Linux)
+    BINARY="$BIN_DIR/vistools-linux-x64"
+    ;;
+  *)
+    echo "Unsupported platform: $OS $ARCH" >&2
+    exit 1
+    ;;
+esac
+
+if [ ! -x "$BINARY" ]; then
+  echo "Binary not found: $BINARY" >&2
+  exit 1
+fi
+
+exec "$BINARY" "$@"

@@ -1,0 +1,16 @@
+{
+  "name": "vistools",
+  "displayName": "Vistools",
+  "version": "0.1.0",
+  "description": "Visual tools for AI agents — inspect, navigate, and crop large images with structured JSON output and coordinate mapping.",
+  "author": {
+    "name": "Zheng Jianqiao"
+  },
+  "homepage": "https://github.com/zhengjianqiao/vistolls",
+  "repository": "https://github.com/zhengjianqiao/vistolls",
+  "license": "MIT OR Apache-2.0",
+  "keywords": ["image", "viewport", "screenshot", "ui-verification", "crop", "resize"],
+  "defaultEnabled": true,
+  "skills": "./skills/claude-code/",
+  "bin": "./bin/"
+}

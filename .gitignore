@@ -1,0 +1,14 @@
+# MCP runtime cache
+.playwright-mcp/
+
+# OS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Build
+target/

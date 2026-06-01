@@ -1,0 +1,102 @@
+name: Build and Sync Skills + Binaries
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'skills/**'
+      - '.claude-plugin/**'
+      - 'bin/**'
+      - 'crates/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            name: vistools-macos-arm64
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            name: vistools-macos-x64
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            name: vistools-linux-x64
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Build release binary
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: target/${{ matrix.target }}/release/vistools
+
+  sync:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout vistolls
+        uses: actions/checkout@v4
+        with:
+          path: vistolls
+
+      - name: Checkout vistools-skills
+        uses: actions/checkout@v4
+        with:
+          repository: zhengjianqiao/vistools-skills
+          token: ${{ secrets.SKILLS_REPO_TOKEN }}
+          path: vistools-skills
+
+      - name: Download all binaries
+        uses: actions/download-artifact@v4
+        with:
+          path: binaries
+
+      - name: Sync files to vistools-skills
+        run: |
+          cd vistools-skills
+
+          # Clean target (except .git and README.md)
+          find . -maxdepth 1 -not -name '.git' -not -name 'README.md' -not -name '.' -exec rm -rf {} +
+
+          # Copy skills and plugin config
+          cp -r ../vistolls/skills ./skills
+          cp -r ../vistolls/.claude-plugin ./.claude-plugin
+          cp ../vistolls/LICENSE-MIT ./LICENSE-MIT
+          cp ../vistolls/LICENSE-APACHE ./LICENSE-APACHE
+
+          # Copy binaries and launcher
+          mkdir -p bin
+          cp ../vistolls/bin/vistools ./bin/vistools
+          cp ../binaries/vistools-macos-arm64/vistools ./bin/vistools-macos-arm64
+          cp ../binaries/vistools-macos-x64/vistools ./bin/vistools-macos-x64
+          cp ../binaries/vistools-linux-x64/vistools ./bin/vistools-linux-x64
+          chmod +x bin/*
+
+      - name: Commit and push if changed
+        run: |
+          cd vistools-skills
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Sync from vistolls@${{ github.sha }}"
+            git push
+          fi
