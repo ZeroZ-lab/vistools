@@ -1298,7 +1298,7 @@ dependencies = [
 
 [[package]]
 name = "vistools"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "assert_cmd",
  "clap",
@@ -1311,7 +1311,7 @@ dependencies = [
 
 [[package]]
 name = "vistools-core"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "image",
  "serde",
