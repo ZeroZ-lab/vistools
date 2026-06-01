@@ -156,7 +156,6 @@ vistools/
 | 文件 | 用途 |
 |------|------|
 | docs/project.md | 技术决策 + 共享约束 |
-| docs/roadmap.md | 视觉仪器层路线图 |
 | docs/idea-brief.md | 探索阶段分析（竞品/场景/评分） |
 | docs/timeline.md | 项目演进时间线 |
 | docs/features/<feature>/contract.md | 功能合约 |
