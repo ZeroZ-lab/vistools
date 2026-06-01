@@ -1,5 +1,7 @@
 # vistools
 
+> **A coordinate-grounded visual inspection protocol for AI coding agents.**
+
 [中文文档](README.zh-CN.md) | **English**
 
 A programmable visual toolkit for AI agents. Inspect, navigate, crop, and sample large images — every command returns structured JSON, and generated views include coordinate mappings back to the source image.
@@ -20,6 +22,24 @@ $ vistools inspect screenshot.png
     }
   }
 }
+```
+
+## Before vs After
+
+**Without vistools:**
+```
+Agent reads a 3200×2400 screenshot → details lost in compression
+  → claims "the button looks correct" → no way to verify
+```
+
+**With vistools:**
+```
+1. inspect → 3200×2400, needs overview
+2. overview --max-side 1200 → scaled preview, scale_factor = 0.375
+3. Spot anomaly at overview (800, 600) → map to source: (2133, 1600)
+4. viewport rect → exact crop of the region
+5. sample --x 2133 --y 1600 → color is #e74c3c, not expected #2563eb
+6. Report: "Button at source (2133, 1600) has incorrect background color"
 ```
 
 ## Why

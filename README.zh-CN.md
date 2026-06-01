@@ -1,6 +1,8 @@
 # vistools
 
-**给 AI Agent 用的本地图片视野控制 CLI 工具。** 检视、导航、裁剪、取色大图片 — 每条命令返回结构化 JSON，生成视野时附带指回源图的坐标映射。
+> **给 AI 编程助手的坐标可信视觉调试协议。**
+
+检视、导航、裁剪、取色大图片 — 每条命令返回结构化 JSON，生成视野时附带指回源图的坐标映射。
 
 [English](README.md) | **中文文档**
 
@@ -20,6 +22,24 @@ $ vistools inspect screenshot.png
     }
   }
 }
+```
+
+## Before vs After
+
+**没有 vistools：**
+```
+Agent 读取 3200×2400 截图 → 压缩后细节丢失
+  → 声称"按钮看起来正确" → 无法验证
+```
+
+**使用 vistools：**
+```
+1. inspect → 3200×2400，需要 overview
+2. overview --max-side 1200 → 缩小预览，scale_factor = 0.375
+3. 在 overview 中发现异常 (800, 600) → 映射回源图：(2133, 1600)
+4. viewport rect → 精确裁剪该区域
+5. sample --x 2133 --y 1600 → 颜色是 #e74c3c，不是预期的 #2563eb
+6. 报告："源图坐标 (2133, 1600) 处的按钮背景颜色错误"
 ```
 
 ## 为什么需要 vistools

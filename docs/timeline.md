@@ -102,19 +102,19 @@
 - 61 tests 全部通过，clippy 0 warnings
 
 ### 2026-06-01 — 拆分为两个仓库 + CI 同步 + 内置 binary
-- 主仓库 `vistolls`：Rust 源码 + skills + CI workflow（source of truth）
+- 主仓库 `vistools`：Rust 源码 + skills + CI workflow（source of truth）
 - 分发仓库 `vistools-skills`：skill 文件 + 预编译 binary（用户安装）
 - `bin/vistools`：平台检测 launcher（自动选 macos-arm64 / macos-x64 / linux-x64）
 - CI workflow：push 到 main → 编译 3 平台 binary → 同步到 vistools-skills
 - plugin.json 声明 `"bin": "./bin/"`，安装后 `vistools` 自动加到 PATH
-- 用户只需 `/plugin install https://github.com/zhengjianqiao/vistools-skills`，无需手动安装 CLI
+- 用户只需 `/plugin install https://github.com/ZeroZ-lab/vistools-skills`，无需手动安装 CLI
 
 ### 2026-06-01 — 拆分为两个仓库
-- 主仓库 `vistolls`：只保留 Rust 源码（crates/）、测试图片（fixtures/）、设计文档（docs/）
-- 新仓库 `vistolls-skills`：AI agent skills（Claude Code plugin + Cursor rule + Codex instructions）
+- 主仓库 `vistools`：只保留 Rust 源码（crates/）、测试图片（fixtures/）、设计文档（docs/）
+- 新仓库 `vistools-skills`：AI agent skills（Claude Code plugin + Cursor rule + Codex instructions）
 - 理由：plugin install 时用户只需几 KB 的 skill 文件，不应下载整个 Rust 项目（含 fixtures ~3MB）
-- 从 vistolls 移除：`skills/`、`.claude-plugin/`
-- README 更新：Skills 章节指向 vistolls-skills 仓库
+- 从 vistools 移除：`skills/`、`.claude-plugin/`
+- README 更新：Skills 章节指向 vistools-skills 仓库
 
 ### 2026-06-01 — Code Review 修复（5 Critical + 7 Warning + 5 Nit）
 - C3: fixture 路径改用 `std::env::var("CARGO_MANIFEST_DIR")`（运行时），集中到 `test_support.rs`，任何人 fork 均可运行
