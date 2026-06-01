@@ -115,3 +115,18 @@
 - 理由：plugin install 时用户只需几 KB 的 skill 文件，不应下载整个 Rust 项目（含 fixtures ~3MB）
 - 从 vistolls 移除：`skills/`、`.claude-plugin/`
 - README 更新：Skills 章节指向 vistolls-skills 仓库
+
+### 2026-06-01 — Code Review 修复（5 Critical + 7 Warning + 5 Nit）
+- C3: fixture 路径改用 `std::env::var("CARGO_MANIFEST_DIR")`（运行时），集中到 `test_support.rs`，任何人 fork 均可运行
+- C1/C2: 消除 5 处生产 `unwrap()`（overview/tile/viewport/resize/rotate 的 `fs::metadata`），改为 `match → CommandResult::err`
+- C5: CLI 退出码从字符串匹配 JSON 改为 `(json, ok)` 元组模式
+- C4: `DEFAULT_JPEG_QUALITY=95` 从死代码变为实际使用（`JpegEncoder::new_with_quality`）
+- W1: 新建 `util.rs` 共享 `save_image`，所有命令统一 JPEG 质量
+- W3: 修复 `cargo fmt` 违规
+- W4: viewport anchor 模式超源图时添加 warning
+- W5: tile 拒绝 `cols > src_w` / `rows > src_h`（防 0 宽度 tile）
+- W7: overview 拒绝 `max_width=0`
+- N4: AGENTS.md `vistolls/` → `vistools/` 拼写修复
+- 新增 3 个测试：`overview_rejects_zero_max_width` / `tile_rejects_cols_exceeding_width` / `viewport_warns_when_larger_than_source`
+- 测试结果：64 tests passed（50 单元 + 14 集成），clippy 0 warnings，fmt clean
+- Release 二进制：5.2MB（≤8MB 约束）

@@ -38,7 +38,7 @@ cargo fmt --check
 ## 项目结构
 
 ```
-vistolls/
+vistools/
 ├── Cargo.toml
 ├── Cargo.lock
 ├── .gitignore

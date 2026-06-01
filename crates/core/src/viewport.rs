@@ -55,6 +55,18 @@ pub fn execute(input: &Path, output: &Path, mode: ViewportMode) -> CommandResult
         }
     };
 
+    let file_meta = match std::fs::metadata(input) {
+        Ok(m) => m,
+        Err(e) => {
+            return CommandResult::err(
+                "viewport",
+                input_str,
+                ErrorInfo::with_message(ErrorCode::FileNotFound, e.to_string()),
+            )
+            .with_elapsed_ms(start.elapsed().as_millis() as u64);
+        }
+    };
+
     let src_size = Size {
         width: img.width(),
         height: img.height(),
@@ -67,7 +79,7 @@ pub fn execute(input: &Path, output: &Path, mode: ViewportMode) -> CommandResult
     }
 
     // Resolve crop region based on mode
-    let (crop_rect, mode_name, params) = match mode {
+    let (crop_rect, mode_name, params, vp_warning) = match mode {
         ViewportMode::Anchor {
             anchor,
             width,
@@ -85,13 +97,21 @@ pub fn execute(input: &Path, output: &Path, mode: ViewportMode) -> CommandResult
                 )
                 .with_elapsed_ms(start.elapsed().as_millis() as u64);
             }
+            let warn = if width > src_size.width || height > src_size.height {
+                Some(format!(
+                    "viewport ({}x{}) exceeds source ({}x{}); clamped to source bounds",
+                    width, height, src_size.width, src_size.height
+                ))
+            } else {
+                None
+            };
             let rect = coord::anchor_to_rect(anchor, width, height, src_size);
             let params = serde_json::json!({
                 "anchor": format!("{:?}", anchor),
                 "width": width,
                 "height": height,
             });
-            (rect, "anchor", params)
+            (rect, "anchor", params, warn)
         }
         ViewportMode::Percent { pct } => {
             // Validate percent bounds
@@ -110,7 +130,7 @@ pub fn execute(input: &Path, output: &Path, mode: ViewportMode) -> CommandResult
             let params = serde_json::json!({
                 "x": pct.x, "y": pct.y, "w": pct.w, "h": pct.h
             });
-            (rect, "percent", params)
+            (rect, "percent", params, None)
         }
         ViewportMode::Rect { rect } => {
             // Validate rect bounds
@@ -147,7 +167,7 @@ pub fn execute(input: &Path, output: &Path, mode: ViewportMode) -> CommandResult
             let params = serde_json::json!({
                 "x": rect.x, "y": rect.y, "width": rect.width, "height": rect.height
             });
-            (rect, "rect", params)
+            (rect, "rect", params, None)
         }
     };
 
@@ -155,7 +175,7 @@ pub fn execute(input: &Path, output: &Path, mode: ViewportMode) -> CommandResult
     let cropped = img.crop(crop_rect.x, crop_rect.y, crop_rect.width, crop_rect.height);
 
     // Save
-    if let Err(e) = cropped.save(output) {
+    if let Err(e) = crate::util::save_image(&cropped, output) {
         return CommandResult::err(
             "viewport",
             input_str,
@@ -164,7 +184,6 @@ pub fn execute(input: &Path, output: &Path, mode: ViewportMode) -> CommandResult
         .with_elapsed_ms(start.elapsed().as_millis() as u64);
     }
 
-    let file_meta = std::fs::metadata(input).unwrap();
     let result_size = Size {
         width: cropped.width(),
         height: cropped.height(),
@@ -188,24 +207,18 @@ pub fn execute(input: &Path, output: &Path, mode: ViewportMode) -> CommandResult
         coordinate_mapping: mapping,
     };
 
-    CommandResult::ok("viewport", input_str, data)
-        .with_elapsed_ms(start.elapsed().as_millis() as u64)
+    let mut r = CommandResult::ok("viewport", input_str, data)
+        .with_elapsed_ms(start.elapsed().as_millis() as u64);
+    if let Some(w) = vp_warning {
+        r = r.with_warning(w);
+    }
+    r
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
-
-    fn fixture(name: &str) -> PathBuf {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .join("fixtures")
-            .join(name)
-    }
+    use crate::test_support::fixture;
 
     #[test]
     fn viewport_anchor_right() {
@@ -328,5 +341,23 @@ mod tests {
         );
         assert!(!result.ok);
         assert_eq!(result.error.unwrap().code, "OUTPUT_SAME_AS_INPUT");
+    }
+
+    #[test]
+    fn viewport_warns_when_larger_than_source() {
+        let dir = tempfile::tempdir().unwrap();
+        let out = dir.path().join("crop.png");
+        let result = execute(
+            &fixture("64x64.png"),
+            &out,
+            ViewportMode::Anchor {
+                anchor: Anchor::Center,
+                width: 200,
+                height: 200,
+            },
+        );
+        assert!(result.ok, "error: {:?}", result.error);
+        assert!(!result.warnings.is_empty());
+        assert!(result.warnings[0].contains("exceeds source"));
     }
 }

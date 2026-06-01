@@ -106,17 +106,7 @@ pub fn infer_format(path: &Path) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
-
-    fn fixture(name: &str) -> PathBuf {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .join("fixtures")
-            .join(name)
-    }
+    use crate::test_support::fixture;
 
     #[test]
     fn inspect_256x256() {

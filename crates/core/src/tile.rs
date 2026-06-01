@@ -39,10 +39,28 @@ pub fn execute(input: &Path, rows: u32, cols: u32, out_dir: &Path) -> CommandRes
         }
     };
 
+    let file_meta = match std::fs::metadata(input) {
+        Ok(m) => m,
+        Err(e) => {
+            return CommandResult::err(
+                "tile",
+                input_str,
+                ErrorInfo::with_message(ErrorCode::FileNotFound, e.to_string()),
+            )
+            .with_elapsed_ms(start.elapsed().as_millis() as u64);
+        }
+    };
+
     let (src_w, src_h) = (img.width(), img.height());
 
     // Guard: pixel limit
     if let Err(e) = guard::validate_dimensions(src_w, src_h) {
+        return CommandResult::err("tile", input_str, e)
+            .with_elapsed_ms(start.elapsed().as_millis() as u64);
+    }
+
+    // Guard: tile grid must not exceed source dimensions
+    if let Err(e) = guard::validate_tile_fits(rows, cols, src_w, src_h) {
         return CommandResult::err("tile", input_str, e)
             .with_elapsed_ms(start.elapsed().as_millis() as u64);
     }
@@ -86,7 +104,7 @@ pub fn execute(input: &Path, rows: u32, cols: u32, out_dir: &Path) -> CommandRes
             let filename = format!("row-{row}-col-{col}.{ext}");
             let tile_path = out_dir.join(&filename);
 
-            if let Err(e) = cropped.save(&tile_path) {
+            if let Err(e) = crate::util::save_image(&cropped, &tile_path) {
                 return CommandResult::err(
                     "tile",
                     input_str,
@@ -114,8 +132,6 @@ pub fn execute(input: &Path, rows: u32, cols: u32, out_dir: &Path) -> CommandRes
         y += tile_h;
     }
 
-    let file_meta = std::fs::metadata(input).unwrap();
-
     let data = TileOutput {
         source: SourceInfo {
             width: src_w,
@@ -134,17 +150,7 @@ pub fn execute(input: &Path, rows: u32, cols: u32, out_dir: &Path) -> CommandRes
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
-
-    fn fixture(name: &str) -> PathBuf {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .join("fixtures")
-            .join(name)
-    }
+    use crate::test_support::fixture;
 
     #[test]
     fn tile_2x2_on_1000x1000() {
@@ -193,5 +199,14 @@ mod tests {
         // Sum of all tile areas must equal source area
         let total_area: u64 = data.tiles.iter().map(|t| t.source_region.area()).sum();
         assert_eq!(total_area, (256 * 256) as u64);
+    }
+
+    #[test]
+    fn tile_rejects_cols_exceeding_width() {
+        let dir = tempfile::tempdir().unwrap();
+        // 64x64 image, 65 cols → 64/65 = 0-width tiles
+        let result = execute(&fixture("64x64.png"), 1, 65, dir.path());
+        assert!(!result.ok);
+        assert_eq!(result.error.unwrap().code, "INVALID_PARAMETERS");
     }
 }

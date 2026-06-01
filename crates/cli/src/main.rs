@@ -171,10 +171,12 @@ impl std::str::FromStr for AnchorArg {
 
 fn main() {
     let cli = Cli::parse();
-    let json = match cli.command {
+    let (json, ok) = match cli.command {
         Commands::Inspect { input } => {
             let result = core::inspect::execute(&input);
-            serde_json::to_string_pretty(&result).unwrap()
+            let ok = result.ok;
+            let json = serde_json::to_string_pretty(&result).unwrap();
+            (json, ok)
         }
         Commands::Overview {
             input,
@@ -182,7 +184,9 @@ fn main() {
             max_width,
         } => {
             let result = core::overview::execute(&input, &output, max_width);
-            serde_json::to_string_pretty(&result).unwrap()
+            let ok = result.ok;
+            let json = serde_json::to_string_pretty(&result).unwrap();
+            (json, ok)
         }
         Commands::Tile {
             input,
@@ -191,7 +195,9 @@ fn main() {
             out_dir,
         } => {
             let result = core::tile::execute(&input, rows, cols, &out_dir);
-            serde_json::to_string_pretty(&result).unwrap()
+            let ok = result.ok;
+            let json = serde_json::to_string_pretty(&result).unwrap();
+            (json, ok)
         }
         Commands::Viewport(sub) => match sub {
             ViewportCommands::Anchor {
@@ -207,7 +213,9 @@ fn main() {
                     height,
                 };
                 let result = core::viewport::execute(&input, &output, mode);
-                serde_json::to_string_pretty(&result).unwrap()
+                let ok = result.ok;
+                let json = serde_json::to_string_pretty(&result).unwrap();
+                (json, ok)
             }
             ViewportCommands::Percent {
                 input,
@@ -221,7 +229,9 @@ fn main() {
                     pct: Percent { x, y, w, h },
                 };
                 let result = core::viewport::execute(&input, &output, mode);
-                serde_json::to_string_pretty(&result).unwrap()
+                let ok = result.ok;
+                let json = serde_json::to_string_pretty(&result).unwrap();
+                (json, ok)
             }
             ViewportCommands::Rect {
                 input,
@@ -240,7 +250,9 @@ fn main() {
                     },
                 };
                 let result = core::viewport::execute(&input, &output, mode);
-                serde_json::to_string_pretty(&result).unwrap()
+                let ok = result.ok;
+                let json = serde_json::to_string_pretty(&result).unwrap();
+                (json, ok)
             }
         },
         Commands::Resize {
@@ -250,7 +262,9 @@ fn main() {
             height,
         } => {
             let result = core::resize::execute(&input, &output, width, height);
-            serde_json::to_string_pretty(&result).unwrap()
+            let ok = result.ok;
+            let json = serde_json::to_string_pretty(&result).unwrap();
+            (json, ok)
         }
         Commands::Rotate {
             input,
@@ -258,14 +272,15 @@ fn main() {
             degrees,
         } => {
             let result = core::rotate::execute(&input, &output, degrees);
-            serde_json::to_string_pretty(&result).unwrap()
+            let ok = result.ok;
+            let json = serde_json::to_string_pretty(&result).unwrap();
+            (json, ok)
         }
     };
 
     println!("{json}");
 
-    // Exit with non-zero code if the command failed
-    if json.contains("\"ok\": false") {
+    if !ok {
         process::exit(1);
     }
 }

@@ -112,6 +112,24 @@ pub fn validate_tile_count(rows: u32, cols: u32) -> Result<(), ErrorInfo> {
     Ok(())
 }
 
+/// Rejects tile grids where cols > source width or rows > source height,
+/// which would produce zero-width or zero-height tiles.
+pub fn validate_tile_fits(rows: u32, cols: u32, src_w: u32, src_h: u32) -> Result<(), ErrorInfo> {
+    if cols > src_w {
+        return Err(ErrorInfo::with_message(
+            ErrorCode::InvalidParameters,
+            format!("cols ({cols}) exceeds source width ({src_w}), would produce 0-width tiles"),
+        ));
+    }
+    if rows > src_h {
+        return Err(ErrorInfo::with_message(
+            ErrorCode::InvalidParameters,
+            format!("rows ({rows}) exceeds source height ({src_h}), would produce 0-height tiles"),
+        ));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

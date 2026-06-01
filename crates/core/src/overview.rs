@@ -26,6 +26,15 @@ pub fn execute(input: &Path, output: &Path, max_width: u32) -> CommandResult<Ove
             .with_elapsed_ms(start.elapsed().as_millis() as u64);
     }
 
+    if max_width == 0 {
+        return CommandResult::err(
+            "overview",
+            input_str,
+            ErrorInfo::with_message(ErrorCode::InvalidParameters, "max_width must be > 0"),
+        )
+        .with_elapsed_ms(start.elapsed().as_millis() as u64);
+    }
+
     // Load image
     let img = match image::open(input) {
         Ok(i) => i,
@@ -34,6 +43,18 @@ pub fn execute(input: &Path, output: &Path, max_width: u32) -> CommandResult<Ove
                 "overview",
                 input_str,
                 ErrorInfo::with_message(ErrorCode::UnsupportedFormat, e.to_string()),
+            )
+            .with_elapsed_ms(start.elapsed().as_millis() as u64);
+        }
+    };
+
+    let file_meta = match std::fs::metadata(input) {
+        Ok(m) => m,
+        Err(e) => {
+            return CommandResult::err(
+                "overview",
+                input_str,
+                ErrorInfo::with_message(ErrorCode::FileNotFound, e.to_string()),
             )
             .with_elapsed_ms(start.elapsed().as_millis() as u64);
         }
@@ -67,7 +88,7 @@ pub fn execute(input: &Path, output: &Path, max_width: u32) -> CommandResult<Ove
     };
 
     // Save output
-    if let Err(e) = save_image(&resized, output) {
+    if let Err(e) = crate::util::save_image(&resized, output) {
         return CommandResult::err(
             "overview",
             input_str,
@@ -75,8 +96,6 @@ pub fn execute(input: &Path, output: &Path, max_width: u32) -> CommandResult<Ove
         )
         .with_elapsed_ms(start.elapsed().as_millis() as u64);
     }
-
-    let file_meta = std::fs::metadata(input).unwrap_or_else(|_| std::fs::metadata(input).unwrap());
 
     let source_rect = Rect {
         x: 0,
@@ -120,40 +139,10 @@ pub fn execute(input: &Path, output: &Path, max_width: u32) -> CommandResult<Ove
     r
 }
 
-/// Save an image to the specified path, inferring format from extension.
-/// FD6: format from output extension.
-fn save_image(img: &image::DynamicImage, path: &Path) -> Result<(), String> {
-    match path
-        .extension()
-        .and_then(|e| e.to_str())
-        .map(|e| e.to_lowercase())
-    {
-        Some(e) if e == "png" => img.save(path).map_err(|e| e.to_string()),
-        Some(e) if e == "jpg" || e == "jpeg" => {
-            let mut buf =
-                std::io::BufWriter::new(std::fs::File::create(path).map_err(|e| e.to_string())?);
-            img.write_to(&mut buf, image::ImageFormat::Jpeg)
-                .map_err(|e| e.to_string())
-        }
-        Some(e) if e == "webp" => img.save(path).map_err(|e| e.to_string()),
-        _ => img.save(path).map_err(|e| e.to_string()),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
-
-    fn fixture(name: &str) -> PathBuf {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .join("fixtures")
-            .join(name)
-    }
+    use crate::test_support::fixture;
 
     #[test]
     fn overview_scales_down() {
@@ -185,5 +174,14 @@ mod tests {
         let result = execute(&f, &f, 32);
         assert!(!result.ok);
         assert_eq!(result.error.unwrap().code, "OUTPUT_SAME_AS_INPUT");
+    }
+
+    #[test]
+    fn overview_rejects_zero_max_width() {
+        let dir = tempfile::tempdir().unwrap();
+        let out = dir.path().join("overview.png");
+        let result = execute(&fixture("64x64.png"), &out, 0);
+        assert!(!result.ok);
+        assert_eq!(result.error.unwrap().code, "INVALID_PARAMETERS");
     }
 }

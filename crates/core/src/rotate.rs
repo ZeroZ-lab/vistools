@@ -52,6 +52,18 @@ pub fn execute(input: &Path, output: &Path, degrees: u32) -> CommandResult<Rotat
         }
     };
 
+    let file_meta = match std::fs::metadata(input) {
+        Ok(m) => m,
+        Err(e) => {
+            return CommandResult::err(
+                "rotate",
+                input_str,
+                ErrorInfo::with_message(ErrorCode::FileNotFound, e.to_string()),
+            )
+            .with_elapsed_ms(start.elapsed().as_millis() as u64);
+        }
+    };
+
     let (src_w, src_h) = (img.width(), img.height());
 
     // Guard: pixel limit
@@ -78,7 +90,7 @@ pub fn execute(input: &Path, output: &Path, degrees: u32) -> CommandResult<Rotat
     let (out_w, out_h) = (rotated.width(), rotated.height());
 
     // Save
-    if let Err(e) = rotated.save(output) {
+    if let Err(e) = crate::util::save_image(&rotated, output) {
         return CommandResult::err(
             "rotate",
             input_str,
@@ -86,8 +98,6 @@ pub fn execute(input: &Path, output: &Path, degrees: u32) -> CommandResult<Rotat
         )
         .with_elapsed_ms(start.elapsed().as_millis() as u64);
     }
-
-    let file_meta = std::fs::metadata(input).unwrap();
 
     // Build coordinate mapping with rotation formula
     let formula = match degrees {
@@ -143,17 +153,7 @@ pub fn execute(input: &Path, output: &Path, degrees: u32) -> CommandResult<Rotat
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
-
-    fn fixture(name: &str) -> PathBuf {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .join("fixtures")
-            .join(name)
-    }
+    use crate::test_support::fixture;
 
     #[test]
     fn rotate_90() {

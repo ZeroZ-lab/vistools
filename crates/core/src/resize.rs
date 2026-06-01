@@ -66,6 +66,18 @@ pub fn execute(
         }
     };
 
+    let file_meta = match std::fs::metadata(input) {
+        Ok(m) => m,
+        Err(e) => {
+            return CommandResult::err(
+                "resize",
+                input_str,
+                ErrorInfo::with_message(ErrorCode::FileNotFound, e.to_string()),
+            )
+            .with_elapsed_ms(start.elapsed().as_millis() as u64);
+        }
+    };
+
     let (src_w, src_h) = (img.width(), img.height());
 
     // Guard: pixel limit
@@ -86,17 +98,13 @@ pub fn execute(
 
     let resized = match height {
         // Forced resize: use resize_exact to hit exact dimensions
-        Some(_) => img.resize_exact(
-            out_w,
-            out_h,
-            image::imageops::FilterType::Lanczos3,
-        ),
+        Some(_) => img.resize_exact(out_w, out_h, image::imageops::FilterType::Lanczos3),
         // Proportional: thumbnail preserves aspect ratio
         None => img.thumbnail(out_w, out_h),
     };
 
     // Save
-    if let Err(e) = resized.save(output) {
+    if let Err(e) = crate::util::save_image(&resized, output) {
         return CommandResult::err(
             "resize",
             input_str,
@@ -105,7 +113,6 @@ pub fn execute(
         .with_elapsed_ms(start.elapsed().as_millis() as u64);
     }
 
-    let file_meta = std::fs::metadata(input).unwrap();
     let scale_factor = out_w as f64 / src_w as f64;
     let source_rect = Rect {
         x: 0,
@@ -147,17 +154,7 @@ pub fn execute(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
-
-    fn fixture(name: &str) -> PathBuf {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .join("fixtures")
-            .join(name)
-    }
+    use crate::test_support::fixture;
 
     #[test]
     fn resize_proportional() {
