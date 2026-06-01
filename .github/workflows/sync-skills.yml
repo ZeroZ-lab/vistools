@@ -1,13 +1,10 @@
-name: Build and Sync Skills + Binaries
+name: Build and Sync Binaries
 
 on:
   push:
     branches:
       - main
     paths:
-      - 'skills/**'
-      - '.claude-plugin/**'
-      - 'bin/**'
       - 'crates/**'
       - 'Cargo.toml'
       - 'Cargo.lock'
@@ -68,11 +65,6 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Checkout vistools
-        uses: actions/checkout@v4
-        with:
-          path: vistools
-
       - name: Clone vistools-skills
         run: |
           git clone https://x-access-token:${{ secrets.SKILLS_REPO_TOKEN }}@github.com/ZeroZ-lab/vistools-skills.git vistools-skills
@@ -85,20 +77,11 @@ jobs:
         with:
           path: binaries
 
-      - name: Sync files to vistools-skills
+      - name: Sync binaries to vistools-skills
         run: |
           cd vistools-skills
 
-          # Clean target (except .git and README.md)
-          find . -maxdepth 1 -not -name '.git' -not -name 'README.md' -not -name '.' -exec rm -rf {} +
-
-          # Copy skills and plugin config
-          cp -r ../vistools/skills ./skills
-          cp -r ../vistools/.claude-plugin ./.claude-plugin
-          cp ../vistools/LICENSE-MIT ./LICENSE-MIT
-          cp ../vistools/LICENSE-APACHE ./LICENSE-APACHE
-
-          # Copy wrapper + all platform binaries into skills/vistools/scripts/
+          # Only copy compiled binaries into skills/vistools/scripts/
           mkdir -p skills/vistools/scripts
           cp ../binaries/vistools-macos-arm64/vistools skills/vistools/scripts/vistools-macos-arm64
           cp ../binaries/vistools-macos-x64/vistools   skills/vistools/scripts/vistools-macos-x64
@@ -116,6 +99,6 @@ jobs:
           if git diff --staged --quiet; then
             echo "No changes to commit"
           else
-            git commit -m "Sync from vistools@${{ github.sha }}"
+            git commit -m "Sync binaries from vistools@${{ github.sha }}"
             git push
           fi
