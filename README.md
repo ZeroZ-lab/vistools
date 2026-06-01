@@ -1,5 +1,7 @@
 # vistools
 
+[中文文档](README.zh-CN.md) | **English**
+
 A programmable visual toolkit for AI agents. Inspect, navigate, and crop large images — every command returns structured JSON with coordinate mappings back to the source image.
 
 ```
