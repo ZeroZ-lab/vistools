@@ -7,7 +7,7 @@
 | 项目 | 值 |
 |------|-----|
 | 日期 | 2026-06-01 |
-| 参与者 | Zheng Jianqiao |
+| 参与者 | ZeroZ-lab |
 | 探索轮次 | 4（第1轮方向分析→第2轮市场竞品+场景验证→第3轮竞品深挖+技术+痛点+产品形态→第4轮架构决策：CLI-only + 登录制解锁远端 AI） |
 
 ---
@@ -158,10 +158,10 @@
 
 | # | 假设 | 验证方法 | 成功标准 | 负责人 | 时间 |
 |---|------|---------|---------|--------|------|
-| H1 | AI Coding Agent 会通过 Bash 主动调用 CLI 控制视觉输入 | 构建 CLI，让 Claude Code 在真实前端任务中使用 | Agent 在 ≥50% 的前端修改任务中主动调用 inspect/tile/viewport | Zheng | 2 周 |
-| H2 | 局部裁剪后模型视觉识别准确率 > 整张图直接发送 | 用 Playwright 截图 + 设计稿，对比整图 vs 局部裁剪的识别结果 | 局部裁剪识别准确率 ≥ 整图的 1.3 倍（特别在文字/UI 细节上） | Zheng | 1 周 |
-| H3 | 开发者愿意为远端 AI 功能（OCR/analyze/semantic-diff）付费 | Phase 2 后 survey 付费意愿 | ≥30% 活跃用户表示愿意付费 | Zheng | 4 周 |
-| H4 | 模型视觉能力增强不会让此工具失去价值 | 持续跟踪模型视觉输入文档 | 即使模型支持更高分辨率，成本/隐私/坐标映射/确定性仍需要本地前处理 | Zheng | 持续 |
+| H1 | AI Coding Agent 会通过 Bash 主动调用 CLI 控制视觉输入 | 构建 CLI，让 Claude Code 在真实前端任务中使用 | Agent 在 ≥50% 的前端修改任务中主动调用 inspect/tile/viewport | ZeroZ-lab | 2 周 |
+| H2 | 局部裁剪后模型视觉识别准确率 > 整张图直接发送 | 用 Playwright 截图 + 设计稿，对比整图 vs 局部裁剪的识别结果 | 局部裁剪识别准确率 ≥ 整图的 1.3 倍（特别在文字/UI 细节上） | ZeroZ-lab | 1 周 |
+| H3 | 开发者愿意为远端 AI 功能（OCR/analyze/semantic-diff）付费 | Phase 2 后 survey 付费意愿 | ≥30% 活跃用户表示愿意付费 | ZeroZ-lab | 4 周 |
+| H4 | 模型视觉能力增强不会让此工具失去价值 | 持续跟踪模型视觉输入文档 | 即使模型支持更高分辨率，成本/隐私/坐标映射/确定性仍需要本地前处理 | ZeroZ-lab | 持续 |
 
 ---
 
@@ -171,11 +171,11 @@
 
 | 行动 | 负责人 | 截止时间 | 完成标准 |
 |------|--------|---------|---------|
-| 实现 Phase 1：inspect/overview/tile/viewport/resize/rotate | Zheng | 2 周 | 所有命令 JSON 输出 + 坐标映射 |
-| 真实 AI Coding 场景验证 | Zheng | 4 周 | ≥3 个前端任务完成截图→裁剪→定位→修复闭环 |
-| Phase 2：concat/blur/diff + login 系统 | Zheng | 5 周 | 登录流程跑通 + 跨平台构建 |
-| Phase 3：远端 AI（analyze/ocr/semantic-diff） | Zheng | 7 周 | 需 login 的 AI 功能可用 |
-| 收集 3 个早期用户反馈 | Zheng | 8 周 | 确认 H1/H3 |
+| 实现 Phase 1：inspect/overview/tile/viewport/resize/rotate | ZeroZ-lab | 2 周 | 所有命令 JSON 输出 + 坐标映射 |
+| 真实 AI Coding 场景验证 | ZeroZ-lab | 4 周 | ≥3 个前端任务完成截图→裁剪→定位→修复闭环 |
+| Phase 2：concat/blur/diff + login 系统 | ZeroZ-lab | 5 周 | 登录流程跑通 + 跨平台构建 |
+| Phase 3：远端 AI（analyze/ocr/semantic-diff） | ZeroZ-lab | 7 周 | 需 login 的 AI 功能可用 |
+| 收集 3 个早期用户反馈 | ZeroZ-lab | 8 周 | 确认 H1/H3 |
 
 **决策标准**：
 - **继续**：H1 + H2 验证通过 → 进入 Phase 2
