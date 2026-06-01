@@ -38,14 +38,14 @@ Three design choices drive everything:
 
 ```bash
 # In Claude Code:
-/plugin install https://github.com/zhengjianqiao/vistools-skills
+/plugin install https://github.com/ZeroZ-lab/vistools-skills
 # Then: /vistools screenshot.png
 ```
 
 ### From source (Rust 1.88+)
 
 ```bash
-git clone https://github.com/zhengjianqiao/vistools
+git clone https://github.com/ZeroZ-lab/vistools
 cd vistools
 cargo install --path crates/cli   # installs to ~/.cargo/bin/vistools
 ```
@@ -115,6 +115,14 @@ vistools sample src.png --rect 100,80,40,40
 ```
 
 Point mode returns `rgba`, `rgb`, lowercase `hex`, and `alpha`. Rect mode returns the rounded average color, `alpha_stats` (`min`, `max`, `average`, `transparent_ratio`), and `pixel_count`. `sample` is read-only and does not create an output image.
+
+### Help & version
+
+```bash
+vistools --help              # list all commands with brief description
+vistools inspect --help      # detailed help for a subcommand
+vistools --version           # print version (e.g. "vistools 0.2.0")
+```
 
 ## JSON output
 
@@ -204,11 +212,11 @@ source_x = result_x / 0.375000, source_y = result_y / 0.375000   # overview
 
 ## Skills
 
-Skills are maintained in a separate repo: [vistools-skills](https://github.com/zhengjianqiao/vistools-skills).
+Skills are maintained in a separate repo: [ZeroZ-lab/vistools-skills](https://github.com/ZeroZ-lab/vistools-skills).
 
 ```bash
 # Claude Code — install from the skills-only repo
-/plugin install https://github.com/zhengjianqiao/vistools-skills
+/plugin install https://github.com/ZeroZ-lab/vistools-skills
 
 # Then use: /vistools screenshot.png
 ```

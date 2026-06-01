@@ -13,7 +13,7 @@ use vistools_core::types::*;
 #[command(
     name = "vistools",
     version,
-    about = "Visual tools for AI agents — inspect, navigate, crop, and sample images"
+    about = "Visual instruments for AI agents — inspect, navigate, crop, and sample images with coordinate mapping"
 )]
 struct Cli {
     #[command(subcommand)]

@@ -38,14 +38,14 @@ $ vistools inspect screenshot.png
 
 ```bash
 # 在 Claude Code 中：
-/plugin install https://github.com/zhengjianqiao/vistools-skills
+/plugin install https://github.com/ZeroZ-lab/vistools-skills
 # 然后：/vistools screenshot.png
 ```
 
 ### 从源码安装（Rust 1.88+）
 
 ```bash
-git clone https://github.com/zhengjianqiao/vistools
+git clone https://github.com/ZeroZ-lab/vistools
 cd vistools
 cargo install --path crates/cli   # 安装到 ~/.cargo/bin/vistools
 ```
@@ -125,6 +125,14 @@ vistools sample src.png --rect 100,80,40,40
 ```
 
 点模式返回 `rgba`、`rgb`、小写 `hex` 和 `alpha`。区域模式返回四通道平均色、`alpha_stats`（`min`、`max`、`average`、`transparent_ratio`）和 `pixel_count`。`sample` 只读源图，不生成输出图片。
+
+### 帮助与版本
+
+```bash
+vistools --help              # 列出所有命令和简要说明
+vistools inspect --help      # 查看子命令详细帮助
+vistools --version           # 输出版本号（如 "vistools 0.2.0"）
+```
 
 ## JSON 输出
 
@@ -214,11 +222,11 @@ source_x = result_x / 0.375000, source_y = result_y / 0.375000   # overview
 
 ## Skills
 
-Skills 维护在 [zhengjianqiao/vistools-skills](https://github.com/zhengjianqiao/vistools-skills) 仓库。
+Skills 维护在 [ZeroZ-lab/vistools-skills](https://github.com/ZeroZ-lab/vistools-skills) 仓库。
 
 ```bash
 # Claude Code — 从 skills 仓库安装（轻量，不含 Rust 源码）
-/plugin install https://github.com/zhengjianqiao/vistools-skills
+/plugin install https://github.com/ZeroZ-lab/vistools-skills
 
 # 然后使用：/vistools screenshot.png
 ```
