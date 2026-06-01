@@ -24,10 +24,13 @@ jobs:
           - target: x86_64-apple-darwin
             os: macos-latest
             name: vistools-macos-x64
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            name: vistools-linux-arm64
+            linker: aarch64-linux-gnu-gcc
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
             name: vistools-linux-x64
-
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -36,6 +39,19 @@ jobs:
         uses: dtolnay/rust-toolchain@1.88.0
         with:
           targets: ${{ matrix.target }}
+
+      - name: Install cross-compilation tools (linux-arm64)
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+
+      - name: Configure cross linker
+        if: matrix.linker
+        run: |
+          mkdir -p .cargo
+          echo "[target.${{ matrix.target }}]" >> .cargo/config.toml
+          echo "linker = \"${{ matrix.linker }}\"" >> .cargo/config.toml
 
       - name: Build release binary
         run: cargo build --release --target ${{ matrix.target }}
@@ -52,10 +68,10 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Checkout vistolls
+      - name: Checkout vistools
         uses: actions/checkout@v4
         with:
-          path: vistolls
+          path: vistools
 
       - name: Clone vistools-skills
         run: |
@@ -77,17 +93,19 @@ jobs:
           find . -maxdepth 1 -not -name '.git' -not -name 'README.md' -not -name '.' -exec rm -rf {} +
 
           # Copy skills and plugin config
-          cp -r ../vistolls/skills ./skills
-          cp -r ../vistolls/.claude-plugin ./.claude-plugin
-          cp ../vistolls/LICENSE-MIT ./LICENSE-MIT
-          cp ../vistolls/LICENSE-APACHE ./LICENSE-APACHE
+          cp -r ../vistools/skills ./skills
+          cp -r ../vistools/.claude-plugin ./.claude-plugin
+          cp ../vistools/LICENSE-MIT ./LICENSE-MIT
+          cp ../vistools/LICENSE-APACHE ./LICENSE-APACHE
 
-          # Copy binaries and launcher
+          # Copy wrapper + all platform binaries into bin/
           mkdir -p bin
-          cp ../vistolls/bin/vistools ./bin/vistools
+          cp ../vistools/bin/vistools ./bin/vistools
           cp ../binaries/vistools-macos-arm64/vistools ./bin/vistools-macos-arm64
-          cp ../binaries/vistools-macos-x64/vistools ./bin/vistools-macos-x64
-          cp ../binaries/vistools-linux-x64/vistools ./bin/vistools-linux-x64
+          cp ../binaries/vistools-macos-x64/vistools   ./bin/vistools-macos-x64
+          cp ../binaries/vistools-linux-arm64/vistools ./bin/vistools-linux-arm64
+          cp ../binaries/vistools-linux-x64/vistools   ./bin/vistools-linux-x64
+
           chmod +x bin/*
 
       - name: Commit and push if changed
@@ -96,10 +114,9 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add -A
-
           if git diff --staged --quiet; then
             echo "No changes to commit"
           else
-            git commit -m "Sync from vistolls@${{ github.sha }}"
+            git commit -m "Sync from vistools@${{ github.sha }}"
             git push
           fi
