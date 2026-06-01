@@ -1,7 +1,7 @@
 #!/bin/bash
 # Platform-aware wrapper for vistools binary.
 # Detects OS and architecture, then runs the correct pre-compiled binary
-# located alongside this script (e.g., bin/vistools-macos-arm64).
+# located alongside this script (e.g., vistools-macos-arm64).
 
 set -euo pipefail
 
