@@ -49,18 +49,20 @@ jobs:
   sync:
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout vistolls
         uses: actions/checkout@v4
         with:
           path: vistolls
 
-      - name: Checkout vistools-skills
-        uses: actions/checkout@v4
-        with:
-          repository: zhengjianqiao/vistools-skills
-          token: ${{ secrets.SKILLS_REPO_TOKEN }}
-          path: vistools-skills
+      - name: Clone vistools-skills
+        run: |
+          git clone https://x-access-token:${{ secrets.SKILLS_REPO_TOKEN }}@github.com/ZeroZ-lab/vistools-skills.git vistools-skills
+          cd vistools-skills
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
 
       - name: Download all binaries
         uses: actions/download-artifact@v4
