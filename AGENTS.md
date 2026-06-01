@@ -74,15 +74,7 @@ vistools/
 │       ├── screenshot_like.jpg     # 1920x1080 类截图
 │       ├── nature_small.jpg        # 400x300 小图（不触发 overview）
 │       └── nature_small.png        # 400x300 PNG 格式测试
-├── .claude-plugin/
-│   └── plugin.json                 # Claude Code plugin 清单
-├── .github/workflows/
-│   └── sync-skills.yml             # CI: skills/ → vistools-skills
-└── skills/                         # agent skills (source of truth, CI 同步到 vistools-skills)
-    ├── README.md
-    ├── claude-code/vistools/SKILL.md
-    ├── cursor/vistools.mdc
-    └── codex/AGENTS.md
+└── docs/                           # 设计决策 + 时间线 + 合约
 ```
 
 ## 工作流
