@@ -114,14 +114,44 @@ pub fn execute(input: &Path, output: &Path, mode: ViewportMode) -> CommandResult
             (rect, "anchor", params, warn)
         }
         ViewportMode::Percent { pct } => {
-            // Validate percent bounds
-            if pct.x < 0.0 || pct.y < 0.0 || pct.w <= 0.0 || pct.h <= 0.0 {
+            if !pct.x.is_finite() || !pct.y.is_finite() || !pct.w.is_finite() || !pct.h.is_finite()
+            {
+                return CommandResult::err(
+                    "viewport",
+                    input_str,
+                    ErrorInfo::with_message(
+                        ErrorCode::InvalidParameters,
+                        "percent values must be finite numbers",
+                    ),
+                )
+                .with_elapsed_ms(start.elapsed().as_millis() as u64);
+            }
+            if pct.x < 0.0
+                || pct.x > 1.0
+                || pct.y < 0.0
+                || pct.y > 1.0
+                || pct.w <= 0.0
+                || pct.w > 1.0
+                || pct.h <= 0.0
+                || pct.h > 1.0
+            {
+                return CommandResult::err(
+                    "viewport",
+                    input_str,
+                    ErrorInfo::with_message(
+                        ErrorCode::InvalidParameters,
+                        "percent x,y must be within 0..1 and w,h must be within 0..1",
+                    ),
+                )
+                .with_elapsed_ms(start.elapsed().as_millis() as u64);
+            }
+            if pct.x + pct.w > 1.0 + f64::EPSILON || pct.y + pct.h > 1.0 + f64::EPSILON {
                 return CommandResult::err(
                     "viewport",
                     input_str,
                     ErrorInfo::with_message(
                         ErrorCode::InvalidCoordinates,
-                        "percent x,y must be >= 0 and w,h must be > 0",
+                        "percent region exceeds source bounds",
                     ),
                 )
                 .with_elapsed_ms(start.elapsed().as_millis() as u64);
@@ -262,6 +292,66 @@ mod tests {
         assert_eq!(data.result.width, 500);
         assert_eq!(data.result.height, 500);
         assert_eq!(data.crop.mode, "percent");
+    }
+
+    #[test]
+    fn viewport_percent_rejects_out_of_range_values() {
+        let dir = tempfile::tempdir().unwrap();
+        let out = dir.path().join("crop.png");
+        let result = execute(
+            &fixture("1000x1000.png"),
+            &out,
+            ViewportMode::Percent {
+                pct: Percent {
+                    x: 0.0,
+                    y: 0.0,
+                    w: 1.5,
+                    h: 0.5,
+                },
+            },
+        );
+        assert!(!result.ok);
+        assert_eq!(result.error.unwrap().code, "INVALID_PARAMETERS");
+    }
+
+    #[test]
+    fn viewport_percent_rejects_region_overflow() {
+        let dir = tempfile::tempdir().unwrap();
+        let out = dir.path().join("crop.png");
+        let result = execute(
+            &fixture("1000x1000.png"),
+            &out,
+            ViewportMode::Percent {
+                pct: Percent {
+                    x: 0.8,
+                    y: 0.0,
+                    w: 0.3,
+                    h: 0.5,
+                },
+            },
+        );
+        assert!(!result.ok);
+        assert_eq!(result.error.unwrap().code, "INVALID_COORDINATES");
+    }
+
+    #[test]
+    fn viewport_percent_rejects_nan() {
+        let dir = tempfile::tempdir().unwrap();
+        let out = dir.path().join("crop.png");
+        let result = execute(
+            &fixture("1000x1000.png"),
+            &out,
+            ViewportMode::Percent {
+                pct: Percent {
+                    x: f64::NAN,
+                    y: 0.0,
+                    w: 0.5,
+                    h: 0.5,
+                },
+            },
+        );
+        assert!(!result.ok);
+        assert_eq!(result.error.unwrap().code, "INVALID_PARAMETERS");
     }
 
     #[test]

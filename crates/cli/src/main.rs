@@ -2,7 +2,7 @@
 //!
 //! Decisions: PD1 (JSON-first), PD5 (binary name vistools),
 //! FD1 (CLI is thin layer calling core).
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process;
 
 use clap::{Parser, Subcommand};
@@ -13,7 +13,7 @@ use vistools_core::types::*;
 #[command(
     name = "vistools",
     version,
-    about = "Visual tools for AI agents — inspect, navigate, and crop images"
+    about = "Visual tools for AI agents — inspect, navigate, crop, and sample images"
 )]
 struct Cli {
     #[command(subcommand)]
@@ -34,9 +34,9 @@ enum Commands {
         input: PathBuf,
         /// Output image path.
         output: PathBuf,
-        /// Maximum output width in pixels.
+        /// Maximum output long side in pixels.
         #[arg(long)]
-        max_width: u32,
+        max_side: u32,
     },
 
     /// Split image into a grid of tiles.
@@ -58,29 +58,19 @@ enum Commands {
     #[command(subcommand)]
     Viewport(ViewportCommands),
 
-    /// Resize the image.
-    Resize {
+    /// Sample point or region color without writing an output image.
+    Sample {
         /// Input image path.
         input: PathBuf,
-        /// Output image path.
-        output: PathBuf,
-        /// Target width.
+        /// X coordinate for point sampling.
         #[arg(long)]
-        width: u32,
-        /// Target height (omit for proportional).
+        x: Option<String>,
+        /// Y coordinate for point sampling.
         #[arg(long)]
-        height: Option<u32>,
-    },
-
-    /// Rotate the image (90/180/270 degrees).
-    Rotate {
-        /// Input image path.
-        input: PathBuf,
-        /// Output image path.
-        output: PathBuf,
-        /// Rotation degrees (0, 90, 180, 270).
+        y: Option<String>,
+        /// Rect region for average sampling: x,y,width,height.
         #[arg(long)]
-        degrees: u32,
+        rect: Option<String>,
     },
 }
 
@@ -181,9 +171,9 @@ fn main() {
         Commands::Overview {
             input,
             output,
-            max_width,
+            max_side,
         } => {
-            let result = core::overview::execute(&input, &output, max_width);
+            let result = core::overview::execute(&input, &output, max_side);
             let ok = result.ok;
             let json = serde_json::to_string_pretty(&result).unwrap();
             (json, ok)
@@ -255,27 +245,7 @@ fn main() {
                 (json, ok)
             }
         },
-        Commands::Resize {
-            input,
-            output,
-            width,
-            height,
-        } => {
-            let result = core::resize::execute(&input, &output, width, height);
-            let ok = result.ok;
-            let json = serde_json::to_string_pretty(&result).unwrap();
-            (json, ok)
-        }
-        Commands::Rotate {
-            input,
-            output,
-            degrees,
-        } => {
-            let result = core::rotate::execute(&input, &output, degrees);
-            let ok = result.ok;
-            let json = serde_json::to_string_pretty(&result).unwrap();
-            (json, ok)
-        }
+        Commands::Sample { input, x, y, rect } => run_sample(input, x, y, rect),
     };
 
     println!("{json}");
@@ -283,4 +253,78 @@ fn main() {
     if !ok {
         process::exit(1);
     }
+}
+
+fn run_sample(
+    input: PathBuf,
+    x: Option<String>,
+    y: Option<String>,
+    rect: Option<String>,
+) -> (String, bool) {
+    let mode = match (x.as_deref(), y.as_deref(), rect.as_deref()) {
+        (Some(x), Some(y), None) => match (parse_u32_arg("x", x), parse_u32_arg("y", y)) {
+            (Ok(x), Ok(y)) => core::sample::SampleMode::Point { x, y },
+            (Err(e), _) | (_, Err(e)) => return invalid_sample_parameters(&input, e),
+        },
+        (None, None, Some(rect)) => match parse_rect_arg(rect) {
+            Ok(rect) => core::sample::SampleMode::Rect { rect },
+            Err(e) => return invalid_sample_parameters(&input, e),
+        },
+        (None, None, None) => {
+            return invalid_sample_parameters(
+                &input,
+                "sample requires either --x and --y, or --rect x,y,width,height",
+            );
+        }
+        (Some(_), None, None) | (None, Some(_), None) => {
+            return invalid_sample_parameters(&input, "--x and --y must be passed together");
+        }
+        _ => {
+            return invalid_sample_parameters(
+                &input,
+                "sample accepts point mode (--x and --y) or rect mode (--rect), not both",
+            );
+        }
+    };
+
+    let result = core::sample::execute(&input, mode);
+    let ok = result.ok;
+    let json = serde_json::to_string_pretty(&result).unwrap();
+    (json, ok)
+}
+
+fn invalid_sample_parameters(input: &Path, message: impl Into<String>) -> (String, bool) {
+    let result = CommandResult::<SampleOutput>::err(
+        "sample",
+        input.display().to_string(),
+        ErrorInfo::with_message(ErrorCode::InvalidParameters, message),
+    );
+    let json = serde_json::to_string_pretty(&result).unwrap();
+    (json, false)
+}
+
+fn parse_u32_arg(name: &str, value: &str) -> Result<u32, String> {
+    value
+        .trim()
+        .parse::<u32>()
+        .map_err(|_| format!("{name} must be an unsigned integer"))
+}
+
+fn parse_rect_arg(value: &str) -> Result<Rect, String> {
+    let parts: Vec<_> = value.split(',').map(str::trim).collect();
+    if parts.len() != 4 || parts.iter().any(|part| part.is_empty()) {
+        return Err("rect must use x,y,width,height syntax".to_string());
+    }
+
+    let x = parse_u32_arg("rect.x", parts[0])?;
+    let y = parse_u32_arg("rect.y", parts[1])?;
+    let width = parse_u32_arg("rect.width", parts[2])?;
+    let height = parse_u32_arg("rect.height", parts[3])?;
+
+    Ok(Rect {
+        x,
+        y,
+        width,
+        height,
+    })
 }

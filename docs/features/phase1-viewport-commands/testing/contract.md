@@ -28,14 +28,13 @@
 | overview | 是 | 单元 + 集成 | **全覆盖** | P0 命令，缩放+映射+边界全测 |
 | tile | 是 | 单元 + 集成 | **全覆盖** | P0 命令，余数策略是关键测试点 |
 | viewport | 是 | 单元 + 集成 | **全覆盖** | P0 核心命令，三种模式 + 越界 + 零面积 |
-| resize | 是 | 单元 + 集成 | 正常+错误 | P1 命令，等比例+强制+缺参数 |
-| rotate | 是 | 单元 + 集成 | 正常+错误 | P1 命令，90/180/270/0/45° |
+| sample | 是 | 单元 + 集成 + schema 快照 | **全覆盖** | 第一视觉仪器，必须锁住 point/rect 输出结构和 alpha 统计 |
 | main (CLI) | 是 | 集成 | 冒烟测试 | 每个命令至少一次 CLI 调用 + JSON 验证 |
 
-**关键路径全覆盖**：guard → coord → inspect → overview → tile → viewport
+**关键路径全覆盖**：guard → coord → inspect → overview → tile → viewport → sample
 
 **被拒**：
-- 全模块 100% 行覆盖：resize/rotate 是 P1，正常+错误路径足够。
+- 全模块 100% 行覆盖：Phase 1 先保证视野导航关键路径全覆盖。
 - 不测 types：序列化是基础设施，不测会漏 Serde derive 错误。
 
 ---
@@ -47,6 +46,7 @@
 | 64x64 纯色 PNG | guard/types 单元测试 | Rust 代码生成（image-rs 创建 → 保存到 fixtures/） |
 | 256x256 渐变 PNG | inspect/overview 单元测试 | Rust 代码生成 |
 | 1000x1000 棋盘格 PNG | tile/viewport 单元测试 | Rust 代码生成（棋盘格便于验证裁剪位置） |
+| 2x2 透明 PNG | sample alpha stats | 单元测试中用 image-rs + tempdir 动态生成 |
 | 6000x4000 截图模拟 PNG | 集成测试（不放入 git，CI 时生成） | 测试 helper 函数动态生成 |
 | 不存在的文件路径 | 错误场景 | 用 `"/tmp/no-such-file.png"` |
 | 超像素限制图片（10001x10001） | guard 边界 | 不实际创建，只 mock Size |
@@ -169,8 +169,6 @@ tests/
 ├── overview_test.rs      # overview 命令 E2E
 ├── tile_test.rs          # tile 命令 E2E
 ├── viewport_test.rs      # viewport 命令 E2E
-├── resize_test.rs        # resize 命令 E2E
-├── rotate_test.rs        # rotate 命令 E2E
 └── integration_test.rs   # 全量冒烟测试（所有命令串联）
 
 fixtures/

@@ -13,8 +13,7 @@
 | overview | ✅ execute 函数 | ✅ CLI + 缩放验证 | 是 | **全覆盖** |
 | tile | ✅ execute 函数 + 余数 | ✅ CLI + 文件生成 | 是 | **全覆盖** |
 | viewport | ✅ 三种模式 | ✅ CLI + 裁剪验证 | 是 | **全覆盖** |
-| resize | ✅ execute 函数 | ✅ CLI + 尺寸验证 | 是 | 正常+错误 |
-| rotate | ✅ execute 函数 | ✅ CLI + 旋转验证 | 是 | 正常+错误 |
+| sample | ✅ 点/区域取色 + alpha | ✅ CLI + schema | 是 | **全覆盖** |
 | main (CLI) | — | ✅ 全量 E2E | 否 | 冒烟 |
 
 ---
@@ -92,7 +91,9 @@
 | 测试名 | 输入 | 预期 |
 |--------|------|------|
 | large_png | 6000x4000 PNG | `width:6000, height:4000, needs_overview:true, max_tile_rows:4, max_tile_cols:3` |
+| large_recommendation | 3200x2400 JPEG | `recommended_next:"overview", suggested_max_side:1568` |
 | small_png | 200x150 PNG | `needs_overview:false` |
+| small_recommendation | 1000x1000 PNG | `recommended_next:"direct"` |
 | jpeg_format | test.jpg | `format:"jpeg"` |
 | webp_format | test.webp | `format:"webp"` |
 
@@ -119,7 +120,8 @@
 
 | 测试名 | 输入 | 预期 |
 |--------|------|------|
-| scale_down | 6000x4000, max_width=1200 | 输出 1200x800, scale=0.2 |
+| scale_down | 6000x4000, max_side=1200 | 输出 1200x800, scale=0.2 |
+| scale_tall | 1200x3000, max_side=600 | 输出 240x600, scale=0.2 |
 | scale_to_jpeg | input.png, output.jpg | 输出 JPEG, format 推断正确 |
 | coordinate_mapping | 6000x4000 → 1200x800 | `scale:0.2, formula 含 0.2` |
 
@@ -127,9 +129,9 @@
 
 | 测试名 | 输入 | 预期 |
 |--------|------|------|
-| no_upscale | 500px 宽, max_width=1000 | 原尺寸复制, warning |
-| max_width_equals_source | 1200px 宽, max_width=1200 | 原尺寸复制, warning |
-| very_small_max_width | 6000x4000, max_width=1 | 输出 1x1（极小但合法） |
+| no_upscale | 500px 长边, max_side=1000 | 原尺寸复制, warning |
+| max_side_equals_source | 1200px 长边, max_side=1200 | 原尺寸复制, warning |
+| very_small_max_side | 6000x4000, max_side=1 | 输出长边为 1（极小但合法） |
 
 ### 错误
 
@@ -211,59 +213,49 @@
 | zero_height | height=0 | `INVALID_DIMENSIONS` |
 | negative_percent | x=-0.1 | `INVALID_PARAMETERS` |
 | over_100_percent | w=1.5 | `INVALID_PARAMETERS` |
+| percent_region_overflow | x=0.8, w=0.3 | `INVALID_COORDINATES` |
+| nan_percent | x=NaN | `INVALID_PARAMETERS` |
 
 ---
 
-## resize 测试用例（P1）
+## sample 测试用例
 
-### 正常
-
-| 测试名 | 输入 | 预期 |
-|--------|------|------|
-| proportional | 6000x4000, --width 1568 | 1568x1045 (等比例) |
-| forced | 6000x4000, --width 800 --height 600 | 800x600 (非等比例) |
-| scale_factor | 6000x4000, --width 1200 | scale_factor=0.2 |
-
-### 边界
+### point 模式
 
 | 测试名 | 输入 | 预期 |
 |--------|------|------|
-| width_only | 1000x500, --width 500 | 500x250 (等比例) |
-| same_size | 1000x500, --width 1000 | 原尺寸复制, warning |
+| point_color_fixture | 64x64 fixture, x=10, y=10 | `rgba:[100,150,200,255]`, `hex:"#6496c8"` |
+| point_edge_inside | x=63, y=63 in 64x64 | 成功 |
+| point_x_oob | x=64, y=0 in 64x64 | `INVALID_COORDINATES` |
+| point_y_oob | x=0, y=64 in 64x64 | `INVALID_COORDINATES` |
 
-### 错误
-
-| 测试名 | 输入 | 预期 |
-|--------|------|------|
-| no_width | 不传 --width | `INVALID_PARAMETERS` |
-| zero_width | --width 0 | `INVALID_PARAMETERS` |
-
----
-
-## rotate 测试用例（P1）
-
-### 正常
+### rect 模式
 
 | 测试名 | 输入 | 预期 |
 |--------|------|------|
-| rotate_90 | 6000x4000, --degrees 90 | 输出 4000x6000 |
-| rotate_180 | 6000x4000, --degrees 180 | 输出 6000x4000 |
-| rotate_270 | 6000x4000, --degrees 270 | 输出 4000x6000 |
-| coordinate_mapping | 90° | formula 含旋转坐标变换 |
+| rect_average_fixture | 64x64 fixture, rect=0,0,2,2 | 平均色 `rgba:[100,150,200,255]`, pixel_count=4 |
+| rect_alpha_stats | 动态透明 PNG 2x2 | min=0, max=255, average=95.75, transparent_ratio=0.5 |
+| rect_zero_width | width=0 | `INVALID_DIMENSIONS` |
+| rect_zero_height | height=0 | `INVALID_DIMENSIONS` |
+| rect_oob | rect=63,63,2,1 in 64x64 | `INVALID_COORDINATES` |
 
-### 边界
-
-| 测试名 | 输入 | 预期 |
-|--------|------|------|
-| zero_degrees | --degrees 0 | 原尺寸复制, warning |
-| same_dimensions_180 | 正方形 1000x1000, 180° | 输出 1000x1000 |
-
-### 错误
+### CLI 参数
 
 | 测试名 | 输入 | 预期 |
 |--------|------|------|
-| invalid_degrees | --degrees 45 | `INVALID_PARAMETERS` |
-| negative_degrees | --degrees -90 | `INVALID_PARAMETERS` |
+| sample_point_cli | `vistools sample img.png --x 10 --y 10` | 成功，`mode:"point"` |
+| sample_rect_cli | `vistools sample img.png --rect 0,0,2,2` | 成功，`mode:"rect"` |
+| malformed_rect | `--rect 0,0,2` | `INVALID_PARAMETERS` |
+| missing_mode | 不传 `--x/--y/--rect` | `INVALID_PARAMETERS` |
+| partial_point | 只传 `--x` 或只传 `--y` | `INVALID_PARAMETERS` |
+| conflicting_modes | 同时传 `--x/--y` 和 `--rect` | `INVALID_PARAMETERS` |
+
+### Schema 快照
+
+| 快照 | 预期 |
+|------|------|
+| sample_point_success_shape | `data.source` + `data.sample.mode/point/color` |
+| sample_rect_success_shape | `data.source` + `data.sample.mode/region/average/alpha_stats/pixel_count` |
 
 ---
 
@@ -274,14 +266,13 @@
 | 命令 | CLI 调用 | 验证 |
 |------|---------|------|
 | inspect | `image-viewport inspect fixtures/256x256.png --json` | JSON ok=true, source.width=256 |
-| overview | `image-viewport overview fixtures/256x256.png out.png --max-width 128 --json` | out.png 存在, result.width=128 |
+| overview | `vistools overview fixtures/256x256.png out.png --max-side 128` | out.png 存在, result.width=128 |
 | tile | `image-viewport tile fixtures/1000x1000.png --rows 2 --cols 2 --out-dir /tmp/t --json` | 4 个文件存在 |
 | viewport anchor | `image-viewport viewport anchor fixtures/1000x1000.png /tmp/v.png --anchor right --width 500 --height 1000 --json` | v.png 存在, crop 正确 |
 | viewport percent | `image-viewport viewport percent fixtures/1000x1000.png /tmp/v2.png --x 0.5 --y 0.5 --w 0.5 --h 0.5 --json` | v2.png 500x500 |
 | viewport rect | `image-viewport viewport rect fixtures/1000x1000.png /tmp/v3.png --x 100 --y 100 --width 200 --height 200 --json` | v3.png 200x200 |
-| resize | `image-viewport resize fixtures/256x256.png /tmp/r.png --width 128 --json` | r.png 128x128 |
-| rotate | `image-viewport rotate fixtures/256x256.png /tmp/rt.png --degrees 90 --json` | rt.png 256x256 (正方形旋转不变) |
-
+| sample point | `vistools sample fixtures/64x64.png --x 10 --y 10` | JSON ok=true, sample.mode=point |
+| sample rect | `vistools sample fixtures/64x64.png --rect 0,0,2,2` | JSON ok=true, sample.mode=rect, pixel_count=4 |
 ### 冒烟串联测试
 
 ```

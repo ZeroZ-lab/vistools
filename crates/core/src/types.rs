@@ -140,7 +140,7 @@ impl ErrorInfo {
 pub struct CoordinateMapping {
     /// [x, y] offset of the crop/viewport origin in source coordinates.
     pub crop_origin_in_source: [u32; 2],
-    /// Scale factor (None for crop-only operations with no resize).
+    /// Scale factor (None for crop-only operations with no scaling).
     pub scale_factor: Option<f64>,
     /// Human-readable formula for coordinate conversion.
     pub formula: String,
@@ -231,6 +231,9 @@ pub struct Suggestion {
     pub needs_overview: bool,
     pub max_tile_rows: u32,
     pub max_tile_cols: u32,
+    pub recommended_next: String,
+    pub reason: String,
+    pub suggested_max_side: u32,
 }
 
 // --- overview ---
@@ -285,26 +288,43 @@ pub struct CropInfo {
     pub params: serde_json::Value,
 }
 
-// --- resize ---
+// --- sample ---
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ResizeOutput {
-    pub output: String,
+pub struct SampleOutput {
     pub source: SourceInfo,
-    pub result: Size,
-    pub scale_factor: f64,
-    pub coordinate_mapping: CoordinateMapping,
+    pub sample: SampleResult,
 }
 
-// --- rotate ---
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "mode", rename_all = "snake_case")]
+pub enum SampleResult {
+    Point {
+        point: Point,
+        color: ColorInfo,
+    },
+    Rect {
+        region: Rect,
+        average: ColorInfo,
+        alpha_stats: AlphaStats,
+        pixel_count: u64,
+    },
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RotateOutput {
-    pub output: String,
-    pub source: SourceInfo,
-    pub result: Size,
-    pub degrees: u32,
-    pub coordinate_mapping: CoordinateMapping,
+pub struct ColorInfo {
+    pub rgba: [u8; 4],
+    pub rgb: [u8; 3],
+    pub hex: String,
+    pub alpha: u8,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AlphaStats {
+    pub min: u8,
+    pub max: u8,
+    pub average: f64,
+    pub transparent_ratio: f64,
 }
 
 // ---------------------------------------------------------------------------

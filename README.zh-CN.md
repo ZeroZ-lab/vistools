@@ -1,6 +1,6 @@
 # vistools
 
-**给 AI Agent 用的本地图片视野控制 CLI 工具。** 检视、导航、裁剪大图片 — 每条命令返回结构化 JSON，附带指回源图的坐标映射。
+**给 AI Agent 用的本地图片视野控制 CLI 工具。** 检视、导航、裁剪、取色大图片 — 每条命令返回结构化 JSON，生成视野时附带指回源图的坐标映射。
 
 [English](README.md) | **中文文档**
 
@@ -10,7 +10,14 @@ $ vistools inspect screenshot.png
   "ok": true,
   "data": {
     "source": { "width": 3200, "height": 2400, "format": "png", "size_bytes": 808243 },
-    "suggestion": { "needs_overview": true, "max_tile_rows": 2, "max_tile_cols": 3 }
+    "suggestion": {
+      "needs_overview": true,
+      "max_tile_rows": 2,
+      "max_tile_cols": 3,
+      "recommended_next": "overview",
+      "reason": "long side 3200 exceeds 1568 visual threshold",
+      "suggested_max_side": 1568
+    }
   }
 }
 ```
@@ -22,7 +29,7 @@ $ vistools inspect screenshot.png
 三个设计原则贯穿始终：
 
 - **JSON-first** — 每条命令输出统一的 `CommandResult<T>` 信封，成功或失败都是同一个结构，Agent 永远用同样的方式解析。
-- **坐标映射** — 每次裁剪、缩放、旋转都附带 `coordinate_mapping`，描述输出坐标如何映射回源图。Agent 在裁剪图中找到按钮，就能精确定位到原图中的位置。
+- **坐标映射** — 每个生成视野都附带 `coordinate_mapping`，描述输出坐标如何映射回源图。Agent 在裁剪图中找到按钮，就能精确定位到原图中的位置。
 - **Agent-safe** — 绝不覆盖源文件。路径沙箱（禁止 `..` 逃逸）。像素上限（100MP）和 tile 上限（64）防止失控调用。
 
 ## 安装
@@ -57,11 +64,10 @@ cargo build --release
 | 命令 | 用途 | 示例 |
 |------|------|------|
 | `inspect` | 读取元数据 + 策略建议 | `vistools inspect img.png` |
-| `overview` | 缩小预览 | `vistools overview img.png out.png --max-width 1200` |
+| `overview` | 缩小预览 | `vistools overview img.png out.png --max-side 1200` |
 | `tile` | 网格切图 | `vistools tile img.png --rows 2 --cols 3 --out-dir ./tiles` |
 | `viewport` | 裁剪区域（3 种模式） | `vistools viewport anchor img.png out.png --anchor center --width 800 --height 600` |
-| `resize` | 缩放 | `vistools resize img.png out.png --width 800` |
-| `rotate` | 旋转 | `vistools rotate img.png out.png --degrees 90` |
+| `sample` | 点/区域取色 | `vistools sample img.png --x 120 --y 80` |
 
 ## 命令详解
 
@@ -73,15 +79,15 @@ cargo build --release
 vistools inspect large_screenshot.png
 ```
 
-当长边超过 1568px（Claude 视觉模型阈值），`suggestion.needs_overview` 为 `true`，`max_tile_rows` / `max_tile_cols` 告诉你该用多细的网格。
+当长边超过 1568px（Claude 视觉模型阈值），`suggestion.recommended_next` 为 `overview`；否则为 `direct`。`max_tile_rows` / `max_tile_cols` 告诉你需要全图覆盖时该用多细的网格。
 
 ### `overview` — 缩小预览
 
 ```bash
-vistools overview large_screenshot.png overview.png --max-width 1200
+vistools overview large_screenshot.png overview.png --max-side 1200
 ```
 
-缩放到 `max_width` 以内，保持宽高比。返回 `scale_factor`，可以把 overview 中的点击位置映射回源图。
+缩放到长边不超过 `max_side`，保持宽高比。返回 `scale_factor`，可以把 overview 中的点击位置映射回源图。
 
 ### `tile` — 网格切图
 
@@ -106,23 +112,19 @@ vistools viewport percent src.png crop.png --x 0.3 --y 0.3 --w 0.4 --h 0.4
 vistools viewport rect src.png crop.png --x 1100 --y 200 --width 700 --height 700
 ```
 
-### `resize` — 缩放
+百分比模式严格校验：`x/y/w/h` 必须在 `0..1` 内，且 `x + w` / `y + h` 不能超过 `1`。
+
+### `sample` — 点/区域取色器
 
 ```bash
-# 等比缩放（省略 --height 保持宽高比）
-vistools resize src.png thumb.png --width 800
+# 单点颜色
+vistools sample src.png --x 120 --y 80
 
-# 强制缩放到精确尺寸
-vistools resize src.png square.png --width 512 --height 512
+# 区域平均色和 alpha 统计
+vistools sample src.png --rect 100,80,40,40
 ```
 
-### `rotate` — 旋转
-
-```bash
-vistools rotate src.png rotated.png --degrees 90   # 支持 0、90、180、270
-```
-
-`--degrees 0` 会复制文件并输出警告。
+点模式返回 `rgba`、`rgb`、小写 `hex` 和 `alpha`。区域模式返回四通道平均色、`alpha_stats`（`min`、`max`、`average`、`transparent_ratio`）和 `pixel_count`。`sample` 只读源图，不生成输出图片。
 
 ## JSON 输出
 
@@ -175,8 +177,8 @@ vistools rotate src.png rotated.png --degrees 90   # 支持 0、90、180、270
 | `FILE_NOT_FOUND` | 输入文件不存在或不是普通文件 |
 | `UNSUPPORTED_FORMAT` | 图片解码器无法读取 |
 | `INVALID_DIMENSIONS` | 宽或高为 0 |
-| `INVALID_COORDINATES` | viewport 矩形超出源图边界 |
-| `INVALID_PARAMETERS` | tile 数量 > 64、旋转角度 ∉ {0,90,180,270} 等 |
+| `INVALID_COORDINATES` | viewport/sample 点或矩形超出源图边界 |
+| `INVALID_PARAMETERS` | tile 数量 > 64、max side 为 0、sample 模式参数错误等 |
 | `OUTPUT_WRITE_ERROR` | 无法写入输出文件 |
 | `PATH_ESCAPE` | 路径包含 `..` |
 | `OUTPUT_SAME_AS_INPUT` | 输出路径会覆盖源文件 |
@@ -188,7 +190,7 @@ vistools rotate src.png rotated.png --degrees 90   # 支持 0、90、180、270
 1. inspect src.png            # 大图？建议什么网格？
        │
        ▼  needs_overview=true
-2. overview src.png overview.png --max-width 1200
+2. overview src.png overview.png --max-side 1200
        │
        ▼  在 overview 中找到感兴趣区域
 3a. tile src.png --rows 2 --cols 3 --out-dir ./tiles
@@ -197,15 +199,17 @@ vistools rotate src.png rotated.png --degrees 90   # 支持 0、90、180、270
 3b. viewport anchor src.png crop.png --anchor top-right --width 800 --height 600
        │
        ▼  coordinate_mapping 告诉你裁剪图中 (100, 50) 在源图的哪里
-4. Agent 处理裁剪图
+4. sample src.png --x 1110 --y 800
+       │
+       ▼  读取源图坐标上的精确颜色和透明度
+5. Agent 处理裁剪图
 ```
 
 `coordinate_mapping.formula` 是机器可读的映射公式：
 
 ```
 source_x = result_x + 2200, source_y = result_y          # 裁剪
-source_x = result_x / 0.375000                           # overview/resize
-source_x = result_y, source_y = 2399 - result_x          # 旋转 90°
+source_x = result_x / 0.375000, source_y = result_y / 0.375000   # overview
 ```
 
 ## Skills

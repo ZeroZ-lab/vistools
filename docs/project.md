@@ -26,8 +26,8 @@
 | Agent 开发者 | Computer-use / Browser Agent 开发者 | 截图预处理、隐私清洗、坐标映射 |
 
 **MVP 范围（Phase 1）**：
-- 必须做：inspect / overview / tile / viewport / resize / rotate，JSON 输出 + 坐标映射
-- 不做：远端 AI 功能（Phase 3）、登录系统（Phase 2）、diff/compare（Phase 2）、MCP server、IDE 插件、OCR/版面分析
+- 必须做：inspect / overview / tile / viewport，JSON 输出 + 坐标映射
+- 不做：远端 AI 功能（Phase 3）、登录系统（Phase 2）、diff/compare（Phase 2）、MCP server、IDE 插件、OCR/版面分析、通用 resize/rotate
 
 **成功指标**：
 
@@ -71,7 +71,7 @@
 | PD2 | 坐标系统 | 统一坐标系 | 原点左上角，x→右，y→下。rect = (x, y, w, h)，percent = 0.0-1.0，anchor = 九宫格语义。所有操作输出包含坐标映射 |
 | PD3 | 文件安全 | Agent-safe | 不覆盖源文件、输出到指定路径、限制最大 tile 数（64）、限制最大像素数（100MP）、错误也返回 JSON |
 | PD4 | 错误处理 | 稳定错误码 | 每种错误有 `error.code`（如 `UNSUPPORTED_FORMAT`），Agent 可 pattern-match |
-| PD5 | 命名规范 | 二进制名 `vistools` | 子命令：inspect / overview / tile / viewport / resize / rotate / concat / blur / diff / analyze / ocr / semantic-diff / login / whoami / logout |
+| PD5 | 命名规范 | 二进制名 `vistools` | 子命令：inspect / overview / tile / viewport / sample；后续视觉仪器：zoom / grid / diff / lens / measure |
 | PD6 | 二进制大小 | ≤8MB（Phase 1） | 纯 Rust 无 C 依赖，release LTO + strip。对比 ImageMagick 30-50MB |
 
 ---
@@ -89,14 +89,14 @@
 
 - inspect（读元数据）：<1ms
 - viewport/crop：<5ms
-- overview/resize：<200ms
+- overview：<200ms
 - tile（单个 tile）：<5ms
 
 ### 兼容性
 
-- JSON 输出 schema 向后兼容：新增字段可选，不删已有字段
-- CLI 参数不删不改（只加新参数）
-- 子命令名稳定，不重命名
+- 当前未发布前允许破坏式收敛命令边界；发布后 JSON 输出 schema 向后兼容
+- 发布后 CLI 参数不删不改（只加新参数）
+- 发布后子命令名稳定，不重命名
 
 ### 工程约束
 
@@ -111,7 +111,7 @@
 - 所有命令输出统一 `CommandResult<T>` 泛型
 
 **测试策略**：
-- 单元测试：core 库每个命令（crop/tile/resize/viewport 坐标计算）
+- 单元测试：core 库每个命令（overview/tile/viewport 坐标计算）
 - 集成测试：assert_cmd E2E 测试 CLI 参数解析 + JSON 输出 schema
 - 测试图片：小尺寸 fixture（64x64、256x256、1000x1000）
 - 目标：≥80% 行覆盖率
@@ -129,4 +129,4 @@
 
 | Feature | 目录 | 状态 | 说明 |
 |---------|------|------|------|
-| Phase 1: 视野控制命令集 | docs/features/phase1-viewport-commands/ | ③详设完成 | 6 命令 + FD1-FD7 + 完整数据模型 |
+| Phase 1: 视野控制命令集 | docs/features/phase1-viewport-commands/ | ⑤sample 已实现 | 4 个视野核心命令 + sample 取色器 + FD1-FD8 |

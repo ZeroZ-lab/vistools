@@ -2,7 +2,7 @@
 
 [中文文档](README.zh-CN.md) | **English**
 
-A programmable visual toolkit for AI agents. Inspect, navigate, and crop large images — every command returns structured JSON with coordinate mappings back to the source image.
+A programmable visual toolkit for AI agents. Inspect, navigate, crop, and sample large images — every command returns structured JSON, and generated views include coordinate mappings back to the source image.
 
 ```
 $ vistools inspect screenshot.png
@@ -10,7 +10,14 @@ $ vistools inspect screenshot.png
   "ok": true,
   "data": {
     "source": { "width": 3200, "height": 2400, "format": "png", "size_bytes": 808243 },
-    "suggestion": { "needs_overview": true, "max_tile_rows": 2, "max_tile_cols": 3 }
+    "suggestion": {
+      "needs_overview": true,
+      "max_tile_rows": 2,
+      "max_tile_cols": 3,
+      "recommended_next": "overview",
+      "reason": "long side 3200 exceeds 1568 visual threshold",
+      "suggested_max_side": 1568
+    }
   }
 }
 ```
@@ -22,7 +29,7 @@ When an AI agent (Claude Code, Cursor, Codex, a browser agent) is handed a large
 Three design choices drive everything:
 
 - **JSON-first.** Every command outputs a `CommandResult<T>` envelope — success or failure — so agents can parse the same shape every time.
-- **Coordinate mapping.** Every crop, resize, and rotation includes a `coordinate_mapping` that describes how to translate output coordinates back to the source. An agent that finds a button in a crop knows exactly where it lives in the original.
+- **Coordinate mapping.** Every generated view includes a `coordinate_mapping` that describes how to translate output coordinates back to the source. An agent that finds a button in a crop knows exactly where it lives in the original.
 - **Agent-safe.** The source file is never touched. Paths are sandboxed (no `..` escape). Pixel limits (100 MP) and tile limits (64) keep runaway calls from blowing up.
 
 ## Install
@@ -62,15 +69,15 @@ The first thing to call on any unknown image. Reads only the header, so it's sub
 vistools inspect large_screenshot.png
 ```
 
-When the long side exceeds 1568 px (Claude's visual-model threshold), `suggestion.needs_overview` is `true` and `max_tile_rows`/`max_tile_cols` tell you how fine a grid to use.
+When the long side exceeds 1568 px (Claude's visual-model threshold), `suggestion.recommended_next` is `overview`; otherwise it is `direct`. `max_tile_rows`/`max_tile_cols` tell you how fine a grid to use if you need full coverage.
 
 ### `overview` — scaled-down preview
 
 ```bash
-vistools overview large_screenshot.png overview.png --max-width 1200
+vistools overview large_screenshot.png overview.png --max-side 1200
 ```
 
-Shrinks to fit `max_width`, preserves aspect ratio, returns the `scale_factor` so you can map clicks in the overview back to the source.
+Shrinks so the longest side fits `max_side`, preserves aspect ratio, and returns the `scale_factor` so you can map clicks in the overview back to the source.
 
 ### `tile` — grid split
 
@@ -95,23 +102,19 @@ vistools viewport percent src.png crop.png --x 0.3 --y 0.3 --w 0.4 --h 0.4
 vistools viewport rect src.png crop.png --x 1100 --y 200 --width 700 --height 700
 ```
 
-### `resize`
+Percent mode is strict: `x/y/w/h` must stay within `0..1`, and `x + w` / `y + h` must not exceed `1`.
+
+### `sample` — point and region color picker
 
 ```bash
-# Proportional (omit --height to preserve aspect ratio)
-vistools resize src.png thumb.png --width 800
+# Point color
+vistools sample src.png --x 120 --y 80
 
-# Forced to exact dimensions
-vistools resize src.png square.png --width 512 --height 512
+# Average color and alpha stats for a region
+vistools sample src.png --rect 100,80,40,40
 ```
 
-### `rotate`
-
-```bash
-vistools rotate src.png rotated.png --degrees 90   # 0, 90, 180, 270
-```
-
-`--degrees 0` copies the file and emits a warning.
+Point mode returns `rgba`, `rgb`, lowercase `hex`, and `alpha`. Rect mode returns the rounded average color, `alpha_stats` (`min`, `max`, `average`, `transparent_ratio`), and `pixel_count`. `sample` is read-only and does not create an output image.
 
 ## JSON output
 
@@ -164,8 +167,8 @@ The process also exits non-zero on failure.
 | `FILE_NOT_FOUND` | Input file does not exist or is not a regular file |
 | `UNSUPPORTED_FORMAT` | Image decoder could not read the file |
 | `INVALID_DIMENSIONS` | Zero width/height passed to a command |
-| `INVALID_COORDINATES` | Viewport rect exceeds source bounds |
-| `INVALID_PARAMETERS` | Tile count > 64, degrees ∉ {0,90,180,270}, etc. |
+| `INVALID_COORDINATES` | Viewport/sample point or rect exceeds source bounds |
+| `INVALID_PARAMETERS` | Tile count > 64, zero max side, malformed sample mode, etc. |
 | `OUTPUT_WRITE_ERROR` | Could not write the output file |
 | `PATH_ESCAPE` | Path contains `..` |
 | `OUTPUT_SAME_AS_INPUT` | Output would overwrite the source |
@@ -177,7 +180,7 @@ The process also exits non-zero on failure.
 1. inspect src.png            # big image? what's the suggested grid?
        │
        ▼  needs_overview=true
-2. overview src.png overview.png --max-width 1200
+2. overview src.png overview.png --max-side 1200
        │
        ▼  find region of interest in the overview
 3a. tile src.png --rows 2 --cols 3 --out-dir ./tiles
@@ -186,15 +189,17 @@ The process also exits non-zero on failure.
 3b. viewport anchor src.png crop.png --anchor top-right --width 800 --height 600
        │
        ▼  coordinate_mapping tells you where (100, 50) in the crop lives in src.png
-4. agent acts on the crop
+4. sample src.png --x 1110 --y 800
+       │
+       ▼  inspect the exact color/alpha at the source coordinate
+5. agent acts on the crop
 ```
 
 The `coordinate_mapping.formula` string is the machine-readable recipe:
 
 ```
 source_x = result_x + 2200, source_y = result_y          # crop
-source_x = result_x / 0.375000                           # overview/resize
-source_x = result_y, source_y = 2399 - result_x          # rotate 90°
+source_x = result_x / 0.375000, source_y = result_y / 0.375000   # overview
 ```
 
 ## Skills
@@ -247,4 +252,3 @@ vistolls/
 ## License
 
 MIT / Apache-2.0, at your option.
-

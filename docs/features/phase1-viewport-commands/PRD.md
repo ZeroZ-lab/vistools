@@ -1,6 +1,6 @@
 # PRD — Phase 1: 视野控制命令集
 
-> image-viewport CLI 的 6 个核心命令：inspect / overview / tile / viewport / resize / rotate。全部 JSON 输出 + 坐标映射 + Agent-safe。
+> vistools CLI 的 4 个视野核心命令：inspect / overview / tile / viewport，以及第一批视觉仪器中的 sample。全部 JSON 输出 + Agent-safe；生成视野的命令附带坐标映射。
 
 ## 版本信息
 
@@ -51,8 +51,8 @@ anchor：top-left / top / top-right / left / center / right / bottom-left / bott
 |--------|------|
 | `FILE_NOT_FOUND` | 输入文件不存在 |
 | `UNSUPPORTED_FORMAT` | 不支持的图片格式 |
-| `INVALID_DIMENSIONS` | 图片尺寸为 0 或超过像素限制 |
-| `INVALID_COORDINATES` | 裁剪/视口坐标超出图片范围 |
+| `INVALID_DIMENSIONS` | 图片尺寸为 0 或传入区域宽高为 0 |
+| `INVALID_COORDINATES` | 裁剪/视口/sample 坐标超出图片范围 |
 | `INVALID_PARAMETERS` | 参数值不合法（如 rows=0） |
 | `OUTPUT_WRITE_ERROR` | 输出文件写入失败 |
 | `PATH_ESCAPE` | 路径包含 `..` 逃逸 |
@@ -73,7 +73,13 @@ When 运行 image-viewport inspect screenshot.png --json
 Then 返回 JSON 包含：
   ok: true
   source: { width: 6000, height: 4000, format: "png", size_bytes: N }
-  suggestion: { max_tile_rows: 4, max_tile_cols: 3, needs_overview: true }
+  suggestion: {
+    max_tile_rows: 4,
+    max_tile_cols: 3,
+    needs_overview: true,
+    recommended_next: "overview",
+    suggested_max_side: 1568
+  }
 ```
 
 ```
@@ -88,7 +94,7 @@ Then 返回 JSON 包含：
 Given 一张 200×150 的小图片
 When 运行 image-viewport inspect small.png --json
 Then 返回 JSON 包含：
-  suggestion: { needs_overview: false }
+  suggestion: { needs_overview: false, recommended_next: "direct" }
 ```
 
 **优先级**：P0
@@ -103,7 +109,7 @@ Then 返回 JSON 包含：
 
 ```
 Given 一张 6000×4000 的 PNG
-When 运行 image-viewport overview screenshot.png overview.jpg --max-width 1200 --json
+When 运行 vistools overview screenshot.png overview.jpg --max-side 1200
 Then 生成 overview.jpg（宽 1200px，按比例缩放）
   返回 JSON 包含：
   ok: true
@@ -114,14 +120,14 @@ Then 生成 overview.jpg（宽 1200px，按比例缩放）
 ```
 
 ```
-Given max-width 大于原图宽度
-When 运行 image-viewport overview small.png out.png --max-width 2000 --json
-Then 不放大，直接复制原图，输出 warnings: ["max_width exceeds source width, using original size"]
+Given max-side 大于原图长边
+When 运行 vistools overview small.png out.png --max-side 2000
+Then 不放大，直接复制原图，输出 warnings: ["max_side ... copying without scaling"]
 ```
 
 ```
 Given 输出路径与输入路径相同
-When 运行 image-viewport overview input.png input.png --max-width 1200 --json
+When 运行 vistools overview input.png input.png --max-side 1200
 Then 返回错误 ok: false, error: { code: "OUTPUT_SAME_AS_INPUT" }
 ```
 
@@ -208,65 +214,85 @@ When 运行 viewport
 Then 返回错误 ok: false, error: { code: "INVALID_DIMENSIONS" }
 ```
 
+```
+Given percent 参数超出 0..1（如 w=1.5）
+When 运行 viewport percent
+Then 返回错误 ok: false, error: { code: "INVALID_PARAMETERS" }
+```
+
+```
+Given percent 区域越界（如 x=0.8, w=0.3）
+When 运行 viewport percent
+Then 返回错误 ok: false, error: { code: "INVALID_COORDINATES" }
+```
+
 **优先级**：P0
 
 ---
 
-### US-05: resize — 缩放图片
+### US-05: sample — 点/区域取色
 
-**作为** Agent，**我想要** 把图片缩放到指定尺寸，**以便** 适配模型输入限制或生成合适大小的输出。
+**作为** Agent，**我想要** 读取源图某个点或区域的颜色和透明度，**以便** 检查 UI 颜色、透明遮罩、抗锯齿边缘或设计稿还原。
 
-**验收条件：**
+**两种模式：**
 
-```
-Given 一张 6000×4000 的 PNG
-When 运行 image-viewport resize screenshot.png resized.jpg --width 1568 --json
-Then 按比例缩放（1568×1045）
-  返回 JSON 包含 source.size, result.size, scale_factor, coordinate_mapping
-```
+#### point — 单点取色
 
 ```
-Given 同时指定 width 和 height
-When 运行 image-viewport resize input.png output.png --width 800 --height 600 --json
-Then 按指定尺寸缩放（非等比例）
+Given 一张 PNG 图片
+When 运行 vistools sample screenshot.png --x 120 --y 80
+Then 返回 JSON 包含：
+  ok: true
+  sample: {
+    mode: "point",
+    point: { x: 120, y: 80 },
+    color: { rgba: [R,G,B,A], rgb: [R,G,B], hex: "#rrggbb", alpha: A }
+  }
 ```
 
-```
-Given 不指定 width
-When 运行 image-viewport resize input.png output.png --json
-Then 返回错误 ok: false, error: { code: "INVALID_PARAMETERS", message: "--width is required" }
-```
-
-**优先级**：P1
-
----
-
-### US-06: rotate — 旋转图片
-
-**作为** Agent，**我想要** 旋转图片（90°/180°/270°），**以便** 调整方向（如横截图转竖截图）。
-
-**验收条件：**
+#### rect — 区域平均色
 
 ```
-Given 一张 6000×4000 的 PNG
-When 运行 image-viewport rotate screenshot.png rotated.png --degrees 90 --json
-Then 旋转 90° 顺时针，输出 4000×6000
-  返回 JSON 包含 source.size, result.size, coordinate_mapping 含旋转公式
+Given 一张 PNG 图片
+When 运行 vistools sample screenshot.png --rect 100,80,40,40
+Then 返回 JSON 包含：
+  ok: true
+  sample: {
+    mode: "rect",
+    region: { x: 100, y: 80, width: 40, height: 40 },
+    average: { rgba: [R,G,B,A], rgb: [R,G,B], hex: "#rrggbb", alpha: A },
+    alpha_stats: { min, max, average, transparent_ratio },
+    pixel_count: 1600
+  }
 ```
 
+**通用验收条件：**
+
 ```
-Given degrees 不是 90/180/270
-When 运行 image-viewport rotate input.png output.png --degrees 45 --json
-Then 返回错误 ok: false, error: { code: "INVALID_PARAMETERS", message: "degrees must be 90, 180, or 270" }
+Given 只传入 --x 或只传入 --y
+When 运行 sample
+Then 返回错误 ok: false, error: { code: "INVALID_PARAMETERS" }
 ```
 
 ```
-Given degrees = 0
-When 运行 image-viewport rotate input.png output.png --degrees 0 --json
-Then 直接复制原图，输出 warnings: ["no rotation needed"]
+Given 同时传入 --x/--y 和 --rect
+When 运行 sample
+Then 返回错误 ok: false, error: { code: "INVALID_PARAMETERS" }
 ```
 
-**优先级**：P1
+```
+Given 点或 rect 超出源图边界
+When 运行 sample
+Then 返回错误 ok: false, error: { code: "INVALID_COORDINATES" }
+```
+
+```
+Given rect 宽或高为 0
+When 运行 sample
+Then 返回错误 ok: false, error: { code: "INVALID_DIMENSIONS" }
+```
+
+**优先级**：P0（v0.3 第一视觉仪器）
 
 ---
 
@@ -279,8 +305,9 @@ Then 直接复制原图，输出 warnings: ["no rotation needed"]
 | inspect | < 1ms | 6000×4000 PNG fixture |
 | viewport / crop | < 5ms | 同上 |
 | tile（单个 tile） | < 5ms | 同上 |
-| overview / resize | < 200ms | 同上（Lanczos3） |
-| rotate | < 10ms | 同上 |
+| overview | < 200ms | 同上 |
+| sample point | < 5ms | 小图 fixture |
+| sample rect | 与区域像素数线性相关 | 透明 PNG fixture + 常规截图 |
 
 ### 二进制大小
 
@@ -308,6 +335,7 @@ Then 直接复制原图，输出 warnings: ["no rotation needed"]
 |------|------|---------|
 | diff / compare | 需要像素比较算法，Phase 1 聚焦视野控制 | Phase 2 |
 | concat / blur / pixelate | 非核心视野控制命令 | Phase 2 |
+| 通用 resize / rotate | 属于像素处理库能力，不属于视野导航层 | 不做；overview/viewport 覆盖视野需求 |
 | login / 远端 AI | 需要服务端基础设施 | Phase 3 |
 | analyze / ocr / semantic-diff | 需要远端 AI 模型 | Phase 3 |
 | MCP server | CLI-only 架构决策（第4轮） | 不做 |
@@ -320,7 +348,7 @@ Then 直接复制原图，输出 warnings: ["no rotation needed"]
 
 | 指标 | 目标值 | 衡量方式 | 时间窗口 |
 |------|--------|---------|---------|
-| 6 个命令全部可用 | 100% 通过集成测试 | CI | 完成时 |
+| 4 个命令全部可用 | 100% 通过集成测试 | CI | 完成时 |
 | JSON 输出 schema 稳定 | 0 breaking change | schema snapshot 测试 | 完成时 |
 | Agent 闭环验证 | ≥3 个前端任务成功 | 手动验证 | 2 周 |
 | 二进制大小 | ≤ 8MB | release build 测量 | 完成时 |
@@ -333,7 +361,7 @@ Then 直接复制原图，输出 warnings: ["no rotation needed"]
 
 1. `cargo test` 全部通过
 2. `cargo clippy -- -D warnings` 无警告
-3. 手动跑 6 个命令，确认 JSON 输出格式正确
+3. 手动跑 4 个命令，确认 JSON 输出格式正确
 4. 确认二进制 ≤ 8MB
 5. 用 Claude Code 在一个真实前端任务中串联 inspect → tile → viewport 验证闭环
 

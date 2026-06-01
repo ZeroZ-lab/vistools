@@ -57,7 +57,7 @@ pub fn percent_to_rect(pct: Percent, source: Size) -> Rect {
 
 /// Build a coordinate mapping from source crop region to result image.
 ///
-/// Used by viewport, overview, resize, rotate to describe how
+/// Used by viewport and overview to describe how
 /// output coordinates relate back to the source image.
 pub fn make_mapping(source_rect: Rect, _source_size: Size, result_size: Size) -> CoordinateMapping {
     let scale_x = if source_rect.width > 0 {
@@ -70,19 +70,19 @@ pub fn make_mapping(source_rect: Rect, _source_size: Size, result_size: Size) ->
     } else {
         1.0
     };
-    // Use the average scale factor (for uniform scaling; differs for forced resize)
+    // Overview uses uniform scaling; viewport uses no scaling.
     let scale = (scale_x + scale_y) / 2.0;
 
     let has_scale = (scale - 1.0).abs() > f64::EPSILON;
     let formula = if has_scale && source_rect.x == 0 && source_rect.y == 0 {
-        format!("source_x = result_x / {scale:.6}")
+        format!("source_x = result_x / {scale:.6}, source_y = result_y / {scale:.6}")
     } else if has_scale {
         format!(
             "source_x = result_x / {:.6} + {}, source_y = result_y / {:.6} + {}",
             scale, source_rect.x, scale, source_rect.y
         )
     } else if source_rect.x == 0 && source_rect.y == 0 {
-        "source_x = result_x".to_string()
+        "source_x = result_x, source_y = result_y".to_string()
     } else {
         format!(
             "source_x = result_x + {}, source_y = result_y + {}",

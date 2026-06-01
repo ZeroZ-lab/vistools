@@ -130,3 +130,47 @@
 - 新增 3 个测试：`overview_rejects_zero_max_width` / `tile_rejects_cols_exceeding_width` / `viewport_warns_when_larger_than_source`
 - 测试结果：64 tests passed（50 单元 + 14 集成），clippy 0 warnings，fmt clean
 - Release 二进制：5.2MB（≤8MB 约束）
+
+### 2026-06-01 — Phase 1 命令边界收敛
+- 产品定位：从通用图片处理收束为 LLM 视觉仪器层（视野导航 + 坐标映射）
+- 公开命令：保留 inspect / overview / tile / viewport
+- 移除命令：resize / rotate（通用像素处理能力，不进入当前公开命令面）
+- overview：`--max-width` 改为 `--max-side`，按长边缩放，适配竖长截图/设计稿
+- 文档同步：project.md、PRD、contract、plan、testing、README、Skill、AGENTS
+- 下一步升级：zoom（显微镜）/ sample（取色器）/ grid（坐标纸）/ diff（变化感知）
+
+### 2026-06-01 — Roadmap 文档
+- 产出：docs/roadmap.md
+- 定位：LLM 视觉仪器层，而不是通用图片处理库
+- 阶段：v0.2 稳定 4 个视野核心命令；v0.3 做 sample / zoom / grid；v0.4 做 diff / lens / measure；v0.5 做 Agent 工作流封装
+- 推荐顺序：percent 越界校验与 schema 快照 → sample → zoom → grid → diff → lens / measure
+- 暂缓：screenshot、OCR、MCP server、远端 AI 分析
+
+### 2026-06-01 — v0.2 核心稳定补丁
+- inspect：新增 `recommended_next`、`reason`、`suggested_max_side`，让 Agent 直接读取下一步建议
+- viewport percent：严格拒绝 NaN、超出 0..1 的参数，以及 `x + w` / `y + h` 越界
+- 错误码：参数范围错误返回 `INVALID_PARAMETERS`，区域越界返回 `INVALID_COORDINATES`
+- 测试：新增 inspect 大图推荐、percent 超范围、percent 区域溢出、NaN 场景
+- Roadmap：v0.2 剩余项收敛为 schema 快照
+
+### 2026-06-01 — Schema 快照测试
+- 新增：crates/cli/tests/schema_snapshot_test.rs
+- 覆盖：inspect 成功、错误信封、overview、tile、viewport 的 CLI JSON 输出形状
+- 方法：把动态值归一化为类型形状，比较内联 JSON 快照
+- 目的：锁住 Agent 解析契约，后续新增 sample/zoom/grid 时避免破坏现有 schema
+
+### 2026-06-01 — sample 取色器
+- 新增：`vistools sample`，第一批视觉仪器中的取色器
+- 模式：点取色 `--x/--y`；区域取色 `--rect x,y,width,height`
+- 输出：RGBA/RGB/HEX/alpha、区域平均色、alpha min/max/average/transparent_ratio、pixel_count
+- 错误边界：缺失/冲突模式和 malformed rect → `INVALID_PARAMETERS`；越界 → `INVALID_COORDINATES`；零尺寸 rect → `INVALID_DIMENSIONS`
+- 测试：新增 sample core 单测、CLI 集成测试和 point/rect schema 快照
+
+### 2026-06-01 — v0.2.0 发布
+- 版本：0.1.2 → 0.2.0（breaking：移除 resize/rotate 命令）
+- 自 v0.1.2 以来累计变更：
+  - 命令面收敛：保留 inspect / overview / tile / viewport，移除 resize / rotate
+  - v0.2 核心稳定：inspect recommended_next + percent 越界校验 + schema 快照
+  - v0.3 sample：点/区域取色器 + alpha 统计
+  - 文档：roadmap.md（LLM 视觉仪器层路线图）
+- 测试：77 passed（52 单元 + 18 集成 + 7 schema 快照），clippy 0 warnings

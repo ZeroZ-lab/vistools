@@ -55,6 +55,17 @@ pub fn execute(input: &Path) -> CommandResult<InspectOutput> {
     // FD7: strategy suggestion based on 1568px threshold
     let long_side = width.max(height);
     let needs_overview = long_side > OVERVIEW_THRESHOLD;
+    let (recommended_next, reason) = if needs_overview {
+        (
+            "overview",
+            format!("long side {long_side} exceeds {OVERVIEW_THRESHOLD} visual threshold"),
+        )
+    } else {
+        (
+            "direct",
+            format!("long side {long_side} is within {OVERVIEW_THRESHOLD} visual threshold"),
+        )
+    };
 
     // Calculate max tile grid that keeps each tile ≤ OVERVIEW_THRESHOLD
     let max_tile_cols = if width > OVERVIEW_THRESHOLD {
@@ -79,6 +90,9 @@ pub fn execute(input: &Path) -> CommandResult<InspectOutput> {
             needs_overview,
             max_tile_rows,
             max_tile_cols,
+            recommended_next: recommended_next.to_string(),
+            reason,
+            suggested_max_side: OVERVIEW_THRESHOLD,
         },
     };
 
@@ -117,6 +131,7 @@ mod tests {
         assert_eq!(data.source.height, 256);
         assert_eq!(data.source.format, "png");
         assert!(!data.suggestion.needs_overview);
+        assert_eq!(data.suggestion.recommended_next, "direct");
     }
 
     #[test]
@@ -125,6 +140,17 @@ mod tests {
         assert!(result.ok);
         let data = result.data.unwrap();
         assert!(!data.suggestion.needs_overview);
+    }
+
+    #[test]
+    fn inspect_large_image_recommends_overview() {
+        let result = execute(&fixture("e2e/landscape_large.jpg"));
+        assert!(result.ok, "error: {:?}", result.error);
+        let data = result.data.unwrap();
+        assert!(data.suggestion.needs_overview);
+        assert_eq!(data.suggestion.recommended_next, "overview");
+        assert_eq!(data.suggestion.suggested_max_side, OVERVIEW_THRESHOLD);
+        assert!(data.suggestion.reason.contains("exceeds"));
     }
 
     #[test]

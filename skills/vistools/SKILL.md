@@ -1,6 +1,6 @@
 ---
 name: vistools
-description: Visually inspect, navigate, and crop images using vistools CLI. Use after modifying frontend code, analyzing screenshots, or working with large images.
+description: Visually inspect, navigate, crop, and sample images using vistools CLI. Use after modifying frontend code, analyzing screenshots, checking UI colors, or working with large images.
 argument-hint: "<image-path> [focus or action]"
 arguments: [image, action]
 allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/vistools/scripts/vistools *) Bash(jq *) Bash(sips *) Bash(which *) Read
@@ -27,6 +27,9 @@ Read the JSON output:
 - `data.source.width` × `data.source.height` — dimensions
 - `data.source.format` — "png", "jpeg", etc.
 - `data.suggestion.needs_overview` — `true` if long side > 1568px
+- `data.suggestion.recommended_next` — `"overview"` or `"direct"`
+- `data.suggestion.reason` — short explanation for the recommendation
+- `data.suggestion.suggested_max_side` — recommended overview long side
 - `data.suggestion.max_tile_rows` × `max_tile_cols` — recommended grid
 
 ## Step 2: Decide What To Do
@@ -35,7 +38,7 @@ Read the JSON output:
 
 **Large image** (`needs_overview: true`) → generate overview first:
 ```bash
-${CLAUDE_PLUGIN_ROOT}/skills/vistools/scripts/vistools overview "$image" /tmp/iv-overview.png --max-width 1200 | jq .
+${CLAUDE_PLUGIN_ROOT}/skills/vistools/scripts/vistools overview "$image" /tmp/iv-overview.png --max-side 1200 | jq .
 ```
 Note the `scale_factor` — divide overview coordinates by it to get source coordinates.
 
@@ -61,6 +64,7 @@ ${CLAUDE_PLUGIN_ROOT}/skills/vistools/scripts/vistools viewport percent "$image"
     --x 0.3 --y 0.3 --w 0.4 --h 0.4
 ```
 Values are fractions 0.0–1.0 of the source.
+The region is strict: `x + w` and `y + h` must not exceed 1.0.
 
 ### D. Exact pixel crop (rect)
 ```bash
@@ -69,16 +73,19 @@ ${CLAUDE_PLUGIN_ROOT}/skills/vistools/scripts/vistools viewport rect "$image" /t
 ```
 Must not exceed source bounds — check with `inspect` first.
 
-### E. Resize
+### E. Color sampling (read-only)
 ```bash
-${CLAUDE_PLUGIN_ROOT}/skills/vistools/scripts/vistools resize "$image" /tmp/iv-resized.png --width 800              # proportional
-${CLAUDE_PLUGIN_ROOT}/skills/vistools/scripts/vistools resize "$image" /tmp/iv-resized.png --width 512 --height 512  # forced exact
-```
+# Exact point color
+${CLAUDE_PLUGIN_ROOT}/skills/vistools/scripts/vistools sample "$image" --x 120 --y 80 | jq .
 
-### F. Rotate
-```bash
-${CLAUDE_PLUGIN_ROOT}/skills/vistools/scripts/vistools rotate "$image" /tmp/iv-rotated.png --degrees 90   # 0, 90, 180, 270
+# Region average color and alpha statistics
+${CLAUDE_PLUGIN_ROOT}/skills/vistools/scripts/vistools sample "$image" --rect 100,80,40,40 | jq .
 ```
+Use point sampling when checking a specific pixel after mapping coordinates back to the source. Use rect sampling for anti-aliased UI edges, shadows, translucent overlays, or areas where one pixel may be misleading.
+
+Read the JSON output:
+- point: `data.sample.color.rgba`, `rgb`, `hex`, `alpha`
+- rect: `data.sample.average`, `alpha_stats`, `pixel_count`
 
 ## Step 4: Coordinate Back-Mapping
 
@@ -115,7 +122,7 @@ All errors return `{"ok": false, "error": {"code": "...", "message": "..."}}`. P
 | `FILE_NOT_FOUND` | Image doesn't exist | Check path |
 | `UNSUPPORTED_FORMAT` | Can't decode | Not a valid image file |
 | `INVALID_COORDINATES` | Rect exceeds bounds | Check source dimensions with inspect |
-| `INVALID_PARAMETERS` | Bad tile count / degrees / width | Tile max 64, degrees ∈ {0,90,180,270} |
+| `INVALID_PARAMETERS` | Bad tile count / max side / sample mode | Tile max 64, max side > 0, pass either `--x --y` or `--rect` |
 | `OUTPUT_SAME_AS_INPUT` | Would overwrite source | Use a different output path |
 | `PIXEL_LIMIT_EXCEEDED` | > 100 megapixels | Use overview to scale down first |
 | `PATH_ESCAPE` | Path has `..` | Use absolute or relative without `..` |

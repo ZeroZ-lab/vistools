@@ -55,6 +55,20 @@ fn inspect_1000x1000() {
         .stdout(predicates::str::contains("\"needs_overview\": false"));
 }
 
+#[test]
+fn inspect_recommends_overview_for_large_image() {
+    bin()
+        .arg("inspect")
+        .arg(fixture("e2e/landscape_large.jpg"))
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("\"needs_overview\": true"))
+        .stdout(predicates::str::contains(
+            "\"recommended_next\": \"overview\"",
+        ))
+        .stdout(predicates::str::contains("\"suggested_max_side\": 1568"));
+}
+
 // ---------------------------------------------------------------------------
 // overview
 // ---------------------------------------------------------------------------
@@ -68,12 +82,31 @@ fn overview_scales_down() {
         .arg("overview")
         .arg(fixture("1000x1000.png"))
         .arg(&out)
-        .arg("--max-width")
+        .arg("--max-side")
         .arg("200")
         .assert()
         .success()
         .stdout(predicates::str::contains("\"width\": 200"))
         .stdout(predicates::str::contains("\"height\": 200"));
+
+    assert!(out.exists());
+}
+
+#[test]
+fn overview_scales_long_side() {
+    let dir = tempfile::tempdir().unwrap();
+    let out = dir.path().join("overview.jpg");
+
+    bin()
+        .arg("overview")
+        .arg(fixture("e2e/portrait_tall.jpg"))
+        .arg(&out)
+        .arg("--max-side")
+        .arg("600")
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("\"width\": 240"))
+        .stdout(predicates::str::contains("\"height\": 600"));
 
     assert!(out.exists());
 }
@@ -172,6 +205,52 @@ fn viewport_percent() {
 }
 
 #[test]
+fn viewport_percent_rejects_out_of_range() {
+    let dir = tempfile::tempdir().unwrap();
+    let out = dir.path().join("crop.png");
+
+    bin()
+        .arg("viewport")
+        .arg("percent")
+        .arg(fixture("1000x1000.png"))
+        .arg(&out)
+        .arg("--x")
+        .arg("0")
+        .arg("--y")
+        .arg("0")
+        .arg("--w")
+        .arg("1.5")
+        .arg("--h")
+        .arg("0.5")
+        .assert()
+        .code(1)
+        .stdout(predicates::str::contains("INVALID_PARAMETERS"));
+}
+
+#[test]
+fn viewport_percent_rejects_region_overflow() {
+    let dir = tempfile::tempdir().unwrap();
+    let out = dir.path().join("crop.png");
+
+    bin()
+        .arg("viewport")
+        .arg("percent")
+        .arg(fixture("1000x1000.png"))
+        .arg(&out)
+        .arg("--x")
+        .arg("0.8")
+        .arg("--y")
+        .arg("0")
+        .arg("--w")
+        .arg("0.3")
+        .arg("--h")
+        .arg("0.5")
+        .assert()
+        .code(1)
+        .stdout(predicates::str::contains("INVALID_COORDINATES"));
+}
+
+#[test]
 fn viewport_rect() {
     let dir = tempfile::tempdir().unwrap();
     let out = dir.path().join("crop.png");
@@ -218,76 +297,54 @@ fn viewport_out_of_bounds() {
 }
 
 // ---------------------------------------------------------------------------
-// resize
+// sample
 // ---------------------------------------------------------------------------
 
 #[test]
-fn resize_proportional() {
-    let dir = tempfile::tempdir().unwrap();
-    let out = dir.path().join("resized.png");
-
+fn sample_point_success() {
     bin()
-        .arg("resize")
-        .arg(fixture("1000x1000.png"))
-        .arg(&out)
-        .arg("--width")
-        .arg("200")
-        .assert()
-        .success()
-        .stdout(predicates::str::contains("\"width\": 200"))
-        .stdout(predicates::str::contains("\"height\": 200"));
-}
-
-#[test]
-fn resize_forced() {
-    let dir = tempfile::tempdir().unwrap();
-    let out = dir.path().join("resized.png");
-
-    bin()
-        .arg("resize")
-        .arg(fixture("1000x1000.png"))
-        .arg(&out)
-        .arg("--width")
-        .arg("800")
-        .arg("--height")
-        .arg("600")
-        .assert()
-        .success()
-        .stdout(predicates::str::contains("\"width\": 800"))
-        .stdout(predicates::str::contains("\"height\": 600"));
-}
-
-// ---------------------------------------------------------------------------
-// rotate
-// ---------------------------------------------------------------------------
-
-#[test]
-fn rotate_90() {
-    let dir = tempfile::tempdir().unwrap();
-    let out = dir.path().join("rotated.png");
-
-    bin()
-        .arg("rotate")
-        .arg(fixture("256x256.png"))
-        .arg(&out)
-        .arg("--degrees")
-        .arg("90")
-        .assert()
-        .success()
-        .stdout(predicates::str::contains("\"degrees\": 90"));
-}
-
-#[test]
-fn rotate_invalid_degrees() {
-    let dir = tempfile::tempdir().unwrap();
-    let out = dir.path().join("rotated.png");
-
-    bin()
-        .arg("rotate")
+        .arg("sample")
         .arg(fixture("64x64.png"))
-        .arg(&out)
-        .arg("--degrees")
-        .arg("45")
+        .arg("--x")
+        .arg("10")
+        .arg("--y")
+        .arg("10")
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("\"mode\": \"point\""))
+        .stdout(predicates::str::contains("\"hex\": \"#6496c8\""));
+}
+
+#[test]
+fn sample_rect_success() {
+    bin()
+        .arg("sample")
+        .arg(fixture("64x64.png"))
+        .arg("--rect")
+        .arg("0,0,2,2")
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("\"mode\": \"rect\""))
+        .stdout(predicates::str::contains("\"pixel_count\": 4"));
+}
+
+#[test]
+fn sample_malformed_rect_returns_invalid_parameters() {
+    bin()
+        .arg("sample")
+        .arg(fixture("64x64.png"))
+        .arg("--rect")
+        .arg("0,0,2")
+        .assert()
+        .code(1)
+        .stdout(predicates::str::contains("INVALID_PARAMETERS"));
+}
+
+#[test]
+fn sample_missing_mode_returns_invalid_parameters() {
+    bin()
+        .arg("sample")
+        .arg(fixture("64x64.png"))
         .assert()
         .code(1)
         .stdout(predicates::str::contains("INVALID_PARAMETERS"));

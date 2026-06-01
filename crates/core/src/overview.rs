@@ -1,4 +1,4 @@
-//! overview command — scale down to a preview image.
+//! overview command — scale down to an agent-readable preview image.
 //!
 //! Decisions: FD6 (output format from extension), FD2 (coordinate mapping).
 use std::path::Path;
@@ -8,7 +8,7 @@ use crate::coord;
 use crate::types::*;
 
 /// Execute the overview command.
-pub fn execute(input: &Path, output: &Path, max_width: u32) -> CommandResult<OverviewOutput> {
+pub fn execute(input: &Path, output: &Path, max_side: u32) -> CommandResult<OverviewOutput> {
     let start = Instant::now();
     let input_str = input.display().to_string();
 
@@ -26,11 +26,11 @@ pub fn execute(input: &Path, output: &Path, max_width: u32) -> CommandResult<Ove
             .with_elapsed_ms(start.elapsed().as_millis() as u64);
     }
 
-    if max_width == 0 {
+    if max_side == 0 {
         return CommandResult::err(
             "overview",
             input_str,
-            ErrorInfo::with_message(ErrorCode::InvalidParameters, "max_width must be > 0"),
+            ErrorInfo::with_message(ErrorCode::InvalidParameters, "max_side must be > 0"),
         )
         .with_elapsed_ms(start.elapsed().as_millis() as u64);
     }
@@ -68,16 +68,19 @@ pub fn execute(input: &Path, output: &Path, max_width: u32) -> CommandResult<Ove
             .with_elapsed_ms(start.elapsed().as_millis() as u64);
     }
 
-    // If max_width >= source width, just copy with a warning
-    let (out_w, out_h, scale_factor, warning) = if max_width >= src_w {
+    let long_side = src_w.max(src_h);
+
+    // If max_side >= source long side, just copy with a warning.
+    let (out_w, out_h, scale_factor, warning) = if max_side >= long_side {
         let w = Some(format!(
-            "max_width ({max_width}) >= source width ({src_w}); copying without scaling",
+            "max_side ({max_side}) >= source long side ({long_side}); copying without scaling",
         ));
         (src_w, src_h, 1.0, w)
     } else {
-        let ratio = max_width as f64 / src_w as f64;
+        let ratio = max_side as f64 / long_side as f64;
+        let out_w = (src_w as f64 * ratio).round().max(1.0) as u32;
         let out_h = (src_h as f64 * ratio).round() as u32;
-        (max_width, out_h, ratio, None)
+        (out_w, out_h.max(1), ratio, None)
     };
 
     // Resize using thumbnail for fast preview
@@ -177,7 +180,19 @@ mod tests {
     }
 
     #[test]
-    fn overview_rejects_zero_max_width() {
+    fn overview_scales_tall_image_by_long_side() {
+        let dir = tempfile::tempdir().unwrap();
+        let out = dir.path().join("overview.jpg");
+        let result = execute(&fixture("e2e/portrait_tall.jpg"), &out, 600);
+        assert!(result.ok, "error: {:?}", result.error);
+        let data = result.data.unwrap();
+        assert_eq!(data.result.width, 240);
+        assert_eq!(data.result.height, 600);
+        assert!((data.scale_factor - 0.2).abs() < 0.01);
+    }
+
+    #[test]
+    fn overview_rejects_zero_max_side() {
         let dir = tempfile::tempdir().unwrap();
         let out = dir.path().join("overview.png");
         let result = execute(&fixture("64x64.png"), &out, 0);

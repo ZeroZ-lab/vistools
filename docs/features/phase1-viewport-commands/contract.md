@@ -1,6 +1,6 @@
 # Phase 1: 视野控制命令集
 
-> 6 个核心命令（inspect/overview/tile/viewport/resize/rotate），给 AI Agent 用的本地图片视野控制。JSON 输出 + 坐标映射 + Agent-safe。
+> 4 个视野核心命令（inspect/overview/tile/viewport）+ 第一个视觉仪器 sample。JSON 输出 + 坐标映射 + Agent-safe。
 
 ## 共享决策
 
@@ -13,6 +13,7 @@
 | FD5 | tile 余数策略 | 最后一个 tile 包含余数像素 | 所有 tile 无缝覆盖完整源图，无遗漏 |
 | FD6 | 输出格式推断 | 根据输出文件扩展名推断 | .png→PNG, .jpg/.jpeg→JPEG, .webp→WebP |
 | FD7 | inspect 策略建议 | 基于 1568px 阈值 | 源图长边 > 1568px 时建议 needs_overview=true |
+| FD8 | sample 取色器 | 只读 JSON 输出 | 支持点取色和矩形平均色；所有输入统一转 RGBA8；rect 平均值四舍五入 |
 
 ### FD1: Workspace 结构
 
@@ -34,9 +35,7 @@ image-viewport/
 │   │       ├── inspect.rs
 │   │       ├── overview.rs
 │   │       ├── tile.rs
-│   │       ├── viewport.rs
-│   │       ├── resize.rs
-│   │       └── rotate.rs
+│   │       └── viewport.rs
 │   └── cli/
 │       ├── Cargo.toml       # image-viewport (depends on core)
 │       └── src/
@@ -134,6 +133,9 @@ struct Suggestion {
     needs_overview: bool,
     max_tile_rows: u32,
     max_tile_cols: u32,
+    recommended_next: String, // "overview" | "direct"
+    reason: String,
+    suggested_max_side: u32,
 }
 
 // overview
@@ -175,23 +177,33 @@ struct CropInfo {
     params: serde_json::Value, // 原始参数（anchor名/百分比值/像素值）
 }
 
-// resize
-struct ResizeOutput {
-    output: String,
+// sample
+struct SampleOutput {
     source: SourceInfo,
-    result: Size,
-    scale_factor: f64,
-    coordinate_mapping: CoordinateMapping,
+    sample: SampleResult,
+}
+enum SampleResult {
+    Point { point: Point, color: ColorInfo },
+    Rect {
+        region: Rect,
+        average: ColorInfo,
+        alpha_stats: AlphaStats,
+        pixel_count: u64,
+    },
+}
+struct ColorInfo {
+    rgba: [u8; 4],
+    rgb: [u8; 3],
+    hex: String,      // lowercase "#rrggbb", alpha excluded
+    alpha: u8,
+}
+struct AlphaStats {
+    min: u8,
+    max: u8,
+    average: f64,
+    transparent_ratio: f64, // alpha == 0 pixels / total pixels
 }
 
-// rotate
-struct RotateOutput {
-    output: String,
-    source: SourceInfo,
-    result: Size,
-    degrees: u32,
-    coordinate_mapping: CoordinateMapping,
-}
 ```
 
 ---
@@ -204,11 +216,12 @@ struct RotateOutput {
 - `guard::validate_output_path(path)` — 拒绝含 `..` 的路径，不能与输入路径相同
 - `guard::validate_dimensions(width, height)` — 拒绝 > 100MP 的图片
 - `guard::validate_tile_count(rows, cols)` — 拒绝 rows * cols > 64
+- `sample`：点坐标必须在源图内；rect 宽高必须 > 0 且完整落在源图内；CLI 模式参数错误返回 `INVALID_PARAMETERS`
 
 ### 性能
 
 - inspect 只读 header（`image::image_dimensions()`），不加载全图
-- overview/resize 使用 `image::imageops::thumbnail()` 用于快速预览（Lanczos3 用于精确输出）
+- overview 使用 `image::imageops::thumbnail()` 用于快速预览
 - tile 使用 `DynamicImage::crop()` 逐块提取，不加载多次
 
 ### 兼容性
@@ -255,8 +268,7 @@ struct RotateOutput {
 | overview | crates/core/src/overview.rs | overview 命令逻辑 |
 | tile | crates/core/src/tile.rs | tile 命令逻辑 |
 | viewport | crates/core/src/viewport.rs | viewport 命令逻辑（anchor/percent/rect） |
-| resize | crates/core/src/resize.rs | resize 命令逻辑 |
-| rotate | crates/core/src/rotate.rs | rotate 命令逻辑 |
+| sample | crates/core/src/sample.rs | sample 命令逻辑（point/rect color sampling） |
 | main | crates/cli/src/main.rs | CLI 入口（clap derive + 分发到 core） |
 
 ---
@@ -294,15 +306,14 @@ main.rs
   ├─ guard::validate_output_path(output)  (if has output)
   ├─ match command:
   │   ├─ Inspect → core::inspect::execute(input)
-  │   ├─ Overview → core::overview::execute(input, output, max_width)
+  │   ├─ Overview → core::overview::execute(input, output, max_side)
   │   ├─ Tile → core::tile::execute(input, rows, cols, out_dir)
   │   ├─ ViewportAnchor → coord::anchor_to_rect(anchor, w, h, source_size)
   │   │                  → core::viewport::execute(input, output, rect)
   │   ├─ ViewportPercent → coord::percent_to_rect(pct, source_size)
   │   │                   → core::viewport::execute(input, output, rect)
   │   ├─ ViewportRect → core::viewport::execute(input, output, rect)
-  │   ├─ Resize → core::resize::execute(input, output, width, height)
-  │   └─ Rotate → core::rotate::execute(input, output, degrees)
+  │   └─ Sample → parse point/rect mode → core::sample::execute(input, mode)
   └─ serde_json::to_string_pretty(&result) → stdout
 ```
 
