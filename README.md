@@ -45,8 +45,8 @@ Three design choices drive everything:
 ### From source (Rust 1.88+)
 
 ```bash
-git clone https://github.com/zhengjianqiao/vistolls
-cd vistolls
+git clone https://github.com/zhengjianqiao/vistools
+cd vistools
 cargo install --path crates/cli   # installs to ~/.cargo/bin/vistools
 ```
 
@@ -204,22 +204,16 @@ source_x = result_x / 0.375000, source_y = result_y / 0.375000   # overview
 
 ## Skills
 
-Skills are maintained in this repo (`skills/`) and auto-synced to [zhengjianqiao/vistools-skills](https://github.com/zhengjianqiao/vistools-skills) via GitHub Actions on every push to main.
+Skills are maintained in a separate repo: [vistools-skills](https://github.com/zhengjianqiao/vistools-skills).
 
 ```bash
-# Claude Code — install from the skills-only repo (lightweight, no Rust source)
+# Claude Code — install from the skills-only repo
 /plugin install https://github.com/zhengjianqiao/vistools-skills
 
 # Then use: /vistools screenshot.png
 ```
 
-Supports Claude Code, Cursor, and Codex. See `skills/README.md` for details.
-
-### CI sync setup (repo maintainer)
-
-The workflow at `.github/workflows/sync-skills.yml` copies `skills/` and `.claude-plugin/` to `vistools-skills` whenever those files change on main.
-
-Required: a Personal Access Token with `repo` scope, added as `SKILLS_REPO_TOKEN` in this repo's Settings → Secrets and variables → Actions.
+Supports Claude Code, Cursor, and Codex.
 
 ## Building
 
@@ -237,15 +231,12 @@ Output format is inferred from the output file's extension.
 ## Project layout
 
 ```
-vistolls/
-├── .claude-plugin/      # Claude Code plugin manifest
-├── .github/workflows/   # CI: sync skills → vistools-skills
+vistools/
 ├── crates/
 │   ├── core/            # library: types, guard, coord, one module per command
 │   └── cli/             # thin clap wrapper + integration tests
 ├── fixtures/            # unit-test images (64x64, 256x256, 1000x1000)
 │   └── e2e/             # real-world test images
-├── skills/              # agent skill definitions (source of truth)
 └── docs/                # design decisions (project.md), timeline, contracts
 ```
 

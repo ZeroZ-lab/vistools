@@ -45,8 +45,8 @@ $ vistools inspect screenshot.png
 ### 从源码安装（Rust 1.88+）
 
 ```bash
-git clone https://github.com/zhengjianqiao/vistolls
-cd vistolls
+git clone https://github.com/zhengjianqiao/vistools
+cd vistools
 cargo install --path crates/cli   # 安装到 ~/.cargo/bin/vistools
 ```
 
