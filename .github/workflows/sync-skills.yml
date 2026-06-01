@@ -98,15 +98,14 @@ jobs:
           cp ../vistools/LICENSE-MIT ./LICENSE-MIT
           cp ../vistools/LICENSE-APACHE ./LICENSE-APACHE
 
-          # Copy wrapper + all platform binaries into bin/
-          mkdir -p bin
-          cp ../vistools/bin/vistools ./bin/vistools
-          cp ../binaries/vistools-macos-arm64/vistools ./bin/vistools-macos-arm64
-          cp ../binaries/vistools-macos-x64/vistools   ./bin/vistools-macos-x64
-          cp ../binaries/vistools-linux-arm64/vistools ./bin/vistools-linux-arm64
-          cp ../binaries/vistools-linux-x64/vistools   ./bin/vistools-linux-x64
+          # Copy wrapper + all platform binaries into skills/vistools/scripts/
+          mkdir -p skills/vistools/scripts
+          cp ../binaries/vistools-macos-arm64/vistools skills/vistools/scripts/vistools-macos-arm64
+          cp ../binaries/vistools-macos-x64/vistools   skills/vistools/scripts/vistools-macos-x64
+          cp ../binaries/vistools-linux-arm64/vistools skills/vistools/scripts/vistools-linux-arm64
+          cp ../binaries/vistools-linux-x64/vistools   skills/vistools/scripts/vistools-linux-x64
 
-          chmod +x bin/*
+          chmod +x skills/vistools/scripts/*
 
       - name: Commit and push if changed
         run: |
