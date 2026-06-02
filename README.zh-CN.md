@@ -146,6 +146,22 @@ vistools sample src.png --rect 100,80,40,40
 
 点模式返回 `rgba`、`rgb`、小写 `hex` 和 `alpha`。区域模式返回四通道平均色、`alpha_stats`（`min`、`max`、`average`、`transparent_ratio`）和 `pixel_count`。`sample` 只读源图，不生成输出图片。
 
+### 摄影计量命令
+
+这些命令都是只读的，返回用于摄影检查的结构化 JSON：
+
+```bash
+vistools histogram src.jpg --rgb
+vistools zone-map src.jpg
+vistools exposure src.jpg --mode evaluative
+vistools focus-map src.jpg --rows 3 --cols 4
+```
+
+- `histogram --rgb` 在默认亮度直方图之外增量输出 R/G/B 三通道，不破坏原有输出形状。
+- `zone-map` 把亮度映射到 Zone System `0..X`，返回每区占比和代表性源图坐标。
+- `exposure` 估算 `ev`，支持 `evaluative`、`spot`、`center-weighted`、`highlight-weighted` 四种测光模式，并输出 `under` / `correct` / `over` 判断。
+- `focus-map` 把整图或 `--rect` 区域切成 `N x M` 网格，返回每格锐度、`best_cell` 和可继续用 `viewport` 深挖的 `focus_point`。
+
 ### 帮助与版本
 
 ```bash

@@ -71,8 +71,11 @@
 | PD2 | 坐标系统 | 统一坐标系 | 原点左上角，x→右，y→下。rect = (x, y, w, h)，percent = 0.0-1.0，anchor = 九宫格语义。所有操作输出包含坐标映射 |
 | PD3 | 文件安全 | Agent-safe | 不覆盖源文件、输出到指定路径、限制最大 tile 数（64）、限制最大像素数（100MP）、错误也返回 JSON |
 | PD4 | 错误处理 | 稳定错误码 | 每种错误有 `error.code`（如 `UNSUPPORTED_FORMAT`），Agent 可 pattern-match |
-| PD5 | 命名规范 | 二进制名 `vistools` | 子命令：inspect / overview / tile / viewport / sample；后续视觉仪器：zoom / grid / diff / lens / measure |
+| PD5 | 命名规范 | 二进制名 `vistools` | 子命令：inspect / overview / tile / viewport / sample；摄影计量：histogram --rgb / zone-map / exposure / focus-map / white-balance；后续：diff / measure / assert-* |
 | PD6 | 二进制大小 | ≤8MB（Phase 1） | 纯 Rust 无 C 依赖，release LTO + strip。对比 ImageMagick 30-50MB |
+| PD7 | 摄影计量算法 | 纯像素数学，不加新依赖 | Zone System 线性 11 区、EV = log2(luma/118)、灰世界色温估算、手写 sRGB→Lab 变换（~50 行）。不引入 palette 等色彩空间 crate |
+| PD8 | 摄影计量模块归属 | 全部在 photo.rs 内扩展 | 新增 zone-map/exposure/focus-map/white-balance 四个 execute_* 函数 + 色彩工具函数。不加新模块文件 |
+| PD9 | histogram 向后兼容 | --rgb flag 增量输出 | 不传 --rgb 时输出与现有完全一致；传 --rgb 时额外输出 R/G/B 三通道 bins + 分位数 + 通道级 clipping |
 
 ---
 
@@ -102,13 +105,29 @@
 
 **模块边界**：
 - Workspace: `vistools-core`（library）+ `vistools`（CLI binary）
-- core 导出公共 API，CLI binary 只做参数解析 + 调用 core
+- core 导出公共 API，CLI binary 只做参数解析 + 调用 core + JSON 打印
 - 未来远端 AI 功能为可选 feature flag（`remote`）
+- core 内部分层：
+  - `constants`：共享常量
+  - `error`：稳定错误码与错误信封
+  - `geom`：Point / Rect / Percent / Anchor / Size 等几何类型
+  - `protocol`：`CommandResult<T>` 与对外 JSON DTO
+  - `source`：图片加载、metadata、format 推断、像素限制
+  - `region`：anchor / percent / rect 解析、clamp、mapping
+  - `inspect` / `overview` / `tile` / `viewport` / `sample` / `photo`：命令语义层（photo 含 sharpness/histogram/clipping/contrast/color-cast/zone-map/exposure/focus-map/white-balance）
+- CLI 内部分层：
+  - `main.rs`：顶层命令注册、dispatch、退出码
+  - `commands/`：每个命令的 clap 参数与调用适配
+  - `parse.rs`：共享 CLI 参数解析
 
 **类型不变量**：
 - 坐标用 newtype（`Point`、`Rect`、`Percent`、`Anchor`），不用裸 tuple
 - 图片尺寸用 `Size { width: u32, height: u32 }`
 - 所有命令输出统一 `CommandResult<T>` 泛型
+- `Rect` 必须通过 checked arithmetic 判断边界，不依赖裸 `u32 + u32`
+- `Percent` 通过统一校验入口收敛到 `0.0..=1.0` 的合法区域
+- `CoordinateMapping` 以机器可读字段为主：`source_origin` / `scale_x` / `scale_y`
+- `viewport` 裁剪协议使用强类型 `CropSpec`，不用 `mode: String + params: Value`
 
 **测试策略**：
 - 单元测试：core 库每个命令（overview/tile/viewport 坐标计算）
@@ -130,3 +149,5 @@
 | Feature | 目录 | 状态 | 说明 |
 |---------|------|------|------|
 | Phase 1: 视野控制命令集 | docs/features/phase1-viewport-commands/ | ⑤sample 已实现 | 4 个视野核心命令 + sample 取色器 + FD1-FD8 |
+| v1: Agent 命令面收敛 | docs/features/v1-agent-command-surface/ | 命令面定义完成 | 视野层 + 测量层 + 断言层，明确 v1 纳入与排除范围 |
+| 摄影计量 | docs/features/photography-metering/ | ⑤P0 build 完成，验收待继续；P1 focus-map 已实现 | P0: histogram --rgb / zone-map / exposure 已实现；按用户明确要求提前实现了 P1 `focus-map`，真实照片验收仍待继续 |

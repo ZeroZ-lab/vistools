@@ -28,11 +28,16 @@ enum Commands {
     Viewport(commands::viewport::ViewportArgs),
     Sample(commands::sample::SampleArgs),
     Sharpness(commands::photo::RegionArgs),
-    Histogram(commands::photo::RegionArgs),
+    Histogram(commands::photo::HistogramArgs),
     HighlightClipping(commands::photo::ThresholdRegionArgs),
     ShadowClipping(commands::photo::ShadowThresholdRegionArgs),
     Contrast(commands::photo::RegionArgs),
     ColorCast(commands::photo::RegionArgs),
+    #[command(name = "zone-map")]
+    ZoneMap(commands::photo::RegionArgs),
+    Exposure(commands::photo::ExposureArgs),
+    #[command(name = "focus-map")]
+    FocusMap(commands::photo::FocusMapArgs),
 }
 
 fn main() {
@@ -49,6 +54,9 @@ fn main() {
         Commands::ShadowClipping(args) => commands::photo::run_shadow_clipping(args),
         Commands::Contrast(args) => commands::photo::run_contrast(args),
         Commands::ColorCast(args) => commands::photo::run_color_cast(args),
+        Commands::ZoneMap(args) => commands::photo::run_zone_map(args),
+        Commands::Exposure(args) => commands::photo::run_exposure(args),
+        Commands::FocusMap(args) => commands::photo::run_focus_map(args),
     };
 
     println!("{json}");

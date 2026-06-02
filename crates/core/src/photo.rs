@@ -6,11 +6,13 @@ use std::path::Path;
 use std::time::Instant;
 
 use crate::error::ErrorInfo;
-use crate::geom::Rect;
+use crate::geom::{Point, Rect};
+use crate::guard;
 use crate::protocol::{
-    ClippingMetrics, ClippingOutput, ColorCastMetrics, ColorCastOutput, CommandResult,
-    ContrastMetrics, ContrastOutput, HistogramMetrics, HistogramOutput, SharpnessMetrics,
-    SharpnessOutput, SourceInfo,
+    ChannelHistogram, ClippingMetrics, ClippingOutput, ColorCastMetrics, ColorCastOutput,
+    CommandResult, ContrastMetrics, ContrastOutput, ExposureOutput, FocusCell, FocusMapOutput,
+    HistogramMetrics, HistogramOutput, RgbHistogram, SharpnessMetrics, SharpnessOutput, SourceInfo,
+    ZoneInfo, ZoneMapOutput,
 };
 use crate::region;
 use crate::source;
@@ -27,48 +29,109 @@ pub fn execute_sharpness(input: &Path, rect: Option<Rect>) -> CommandResult<Shar
         }
     };
 
-    let mut sum = 0.0;
-    let mut sum_sq = 0.0;
-    let mut max_edge = 0.0_f64;
-    let mut count = 0u64;
-
-    if region.width >= 2 && region.height >= 2 {
-        for y in region.y..(region.bottom() - 1) {
-            for x in region.x..(region.right() - 1) {
-                let l = luma(img.get_pixel(x, y).0);
-                let right = luma(img.get_pixel(x + 1, y).0);
-                let down = luma(img.get_pixel(x, y + 1).0);
-                let edge = ((right - l).powi(2) + (down - l).powi(2)).sqrt();
-                sum += edge;
-                sum_sq += edge * edge;
-                max_edge = max_edge.max(edge);
-                count += 1;
-            }
-        }
-    }
-
-    let mean = if count == 0 { 0.0 } else { sum / count as f64 };
-    let variance = if count == 0 {
-        0.0
-    } else {
-        (sum_sq / count as f64) - mean * mean
-    };
-
     let data = SharpnessOutput {
         source,
         region,
-        sharpness: SharpnessMetrics {
-            score: variance.max(0.0),
-            mean_edge_strength: mean,
-            max_edge_strength: max_edge,
-        },
+        sharpness: measure_sharpness(&img, region),
     };
 
     CommandResult::ok("sharpness", input_str, data)
         .with_elapsed_ms(start.elapsed().as_millis() as u64)
 }
 
-pub fn execute_histogram(input: &Path, rect: Option<Rect>) -> CommandResult<HistogramOutput> {
+pub fn execute_focus_map(
+    input: &Path,
+    rect: Option<Rect>,
+    rows: u32,
+    cols: u32,
+) -> CommandResult<FocusMapOutput> {
+    let start = Instant::now();
+    let input_str = input.display().to_string();
+
+    let (img, source, region) = match load_region(input, rect) {
+        Ok(loaded) => loaded,
+        Err(error) => {
+            return CommandResult::err("focus-map", input_str, error)
+                .with_elapsed_ms(start.elapsed().as_millis() as u64);
+        }
+    };
+
+    if let Err(error) = guard::validate_tile_count(rows, cols) {
+        return CommandResult::err("focus-map", input_str, error)
+            .with_elapsed_ms(start.elapsed().as_millis() as u64);
+    }
+    if let Err(error) = guard::validate_tile_fits(rows, cols, region.width, region.height) {
+        return CommandResult::err("focus-map", input_str, error)
+            .with_elapsed_ms(start.elapsed().as_millis() as u64);
+    }
+
+    // PD8: focus-map stays in photo.rs and reuses the sharpness kernel over a tile-style grid.
+    let mut cells = Vec::with_capacity((rows * cols) as usize);
+    let mut best_cell: Option<FocusCell> = None;
+
+    let base_cell_w = region.width / cols;
+    let base_cell_h = region.height / rows;
+    let remainder_w = region.width % cols;
+    let remainder_h = region.height % rows;
+
+    let mut y = region.y;
+    for row in 0..rows {
+        let cell_h = base_cell_h + if row == rows - 1 { remainder_h } else { 0 };
+        let mut x = region.x;
+
+        for col in 0..cols {
+            let cell_w = base_cell_w + if col == cols - 1 { remainder_w } else { 0 };
+            let cell_region = Rect {
+                x,
+                y,
+                width: cell_w,
+                height: cell_h,
+            };
+            let cell = FocusCell {
+                row,
+                col,
+                region: cell_region,
+                sharpness: measure_sharpness(&img, cell_region),
+            };
+
+            if best_cell
+                .as_ref()
+                .is_none_or(|best| cell.sharpness.score > best.sharpness.score)
+            {
+                best_cell = Some(cell.clone());
+            }
+            cells.push(cell);
+            x += cell_w;
+        }
+
+        y += cell_h;
+    }
+
+    let best_cell = best_cell.expect("validated rows/cols guarantee at least one cell");
+    let focus_point = Point {
+        x: best_cell.region.x + (best_cell.region.width / 2),
+        y: best_cell.region.y + (best_cell.region.height / 2),
+    };
+
+    let data = FocusMapOutput {
+        source,
+        region,
+        rows,
+        cols,
+        cells,
+        best_cell,
+        focus_point,
+    };
+
+    CommandResult::ok("focus-map", input_str, data)
+        .with_elapsed_ms(start.elapsed().as_millis() as u64)
+}
+
+pub fn execute_histogram(
+    input: &Path,
+    rect: Option<Rect>,
+    rgb: bool,
+) -> CommandResult<HistogramOutput> {
     let start = Instant::now();
     let input_str = input.display().to_string();
 
@@ -83,10 +146,25 @@ pub fn execute_histogram(input: &Path, rect: Option<Rect>) -> CommandResult<Hist
     let mut bins = vec![0u64; 256];
     let mut sum = 0u64;
 
+    // Per-channel bins (always computed, only included in output when rgb=true)
+    let mut r_bins = vec![0u64; 256];
+    let mut g_bins = vec![0u64; 256];
+    let mut b_bins = vec![0u64; 256];
+    let mut r_sum = 0u64;
+    let mut g_sum = 0u64;
+    let mut b_sum = 0u64;
+
     iterate_region(region, |x, y| {
-        let value = luma_u8(img.get_pixel(x, y).0);
+        let [r, g, b, _] = img.get_pixel(x, y).0;
+        let value = luma_u8([r, g, b, 255]);
         bins[value as usize] += 1;
         sum += value as u64;
+        r_bins[r as usize] += 1;
+        g_bins[g as usize] += 1;
+        b_bins[b as usize] += 1;
+        r_sum += r as u64;
+        g_sum += g as u64;
+        b_sum += b as u64;
     });
 
     let pixel_count = region.area();
@@ -94,6 +172,16 @@ pub fn execute_histogram(input: &Path, rect: Option<Rect>) -> CommandResult<Hist
         0.0
     } else {
         sum as f64 / pixel_count as f64
+    };
+
+    let rgb_histogram = if rgb && pixel_count > 0 {
+        Some(RgbHistogram {
+            r: build_channel_histogram(&r_bins, r_sum, pixel_count),
+            g: build_channel_histogram(&g_bins, g_sum, pixel_count),
+            b: build_channel_histogram(&b_bins, b_sum, pixel_count),
+        })
+    } else {
+        None
     };
 
     let data = HistogramOutput {
@@ -106,6 +194,7 @@ pub fn execute_histogram(input: &Path, rect: Option<Rect>) -> CommandResult<Hist
             bins,
             pixel_count,
             mean_luma,
+            rgb: rgb_histogram,
         },
     };
 
@@ -295,6 +384,227 @@ fn execute_clipping(
         .with_elapsed_ms(start.elapsed().as_millis() as u64)
 }
 
+// ── zone-map (FD2) ─────────────────────────────────────────────────────────
+
+const ZONE_LABELS: [&str; 11] = [
+    "0", "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X",
+];
+
+/// Map a luma value (0–255) to a Zone System index (0–10).
+fn zone_index(luma: u8) -> u8 {
+    let idx = (luma as u16 * 11) / 256;
+    idx.min(10) as u8
+}
+
+pub fn execute_zone_map(input: &Path, rect: Option<Rect>) -> CommandResult<ZoneMapOutput> {
+    let start = Instant::now();
+    let input_str = input.display().to_string();
+
+    let (img, source, region) = match load_region(input, rect) {
+        Ok(loaded) => loaded,
+        Err(error) => {
+            return CommandResult::err("zone-map", input_str, error)
+                .with_elapsed_ms(start.elapsed().as_millis() as u64);
+        }
+    };
+
+    let mut zone_counts = [0u64; 11];
+    let mut first_pixels: [Option<Point>; 11] = Default::default();
+
+    iterate_region(region, |x, y| {
+        let l = luma_u8(img.get_pixel(x, y).0);
+        let idx = zone_index(l) as usize;
+        if first_pixels[idx].is_none() {
+            first_pixels[idx] = Some(Point { x, y });
+        }
+        zone_counts[idx] += 1;
+    });
+
+    let pixel_count = region.area();
+    let zones: Vec<ZoneInfo> = (0..11)
+        .map(|i| {
+            let low = (i as u16 * 256 / 11) as u8;
+            let high = if i == 10 {
+                255
+            } else {
+                (((i + 1) as u16 * 256 / 11) - 1) as u8
+            };
+            ZoneInfo {
+                zone: i as u8,
+                label: ZONE_LABELS[i].to_string(),
+                luma_range: (low, high),
+                pixel_count: zone_counts[i],
+                ratio: if pixel_count == 0 {
+                    0.0
+                } else {
+                    zone_counts[i] as f64 / pixel_count as f64
+                },
+                representative_rect: first_pixels[i]
+                    .map(|p| Rect {
+                        x: p.x,
+                        y: p.y,
+                        width: 1,
+                        height: 1,
+                    })
+                    .unwrap_or(Rect {
+                        x: 0,
+                        y: 0,
+                        width: 0,
+                        height: 0,
+                    }),
+            }
+        })
+        .collect();
+
+    let data = ZoneMapOutput {
+        source,
+        region,
+        zones,
+    };
+
+    CommandResult::ok("zone-map", input_str, data)
+        .with_elapsed_ms(start.elapsed().as_millis() as u64)
+}
+
+// ── exposure (FD3, FD4, FD5) ───────────────────────────────────────────────
+
+/// Camera metering mode.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MeteringMode {
+    Evaluative,
+    Spot,
+    CenterWeighted,
+    HighlightWeighted,
+}
+
+impl MeteringMode {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            MeteringMode::Evaluative => "evaluative",
+            MeteringMode::Spot => "spot",
+            MeteringMode::CenterWeighted => "center_weighted",
+            MeteringMode::HighlightWeighted => "highlight_weighted",
+        }
+    }
+}
+
+pub fn execute_exposure(
+    input: &Path,
+    rect: Option<Rect>,
+    mode: MeteringMode,
+    spot_point: Option<Point>,
+) -> CommandResult<ExposureOutput> {
+    let start = Instant::now();
+    let input_str = input.display().to_string();
+
+    let (img, source, region) = match load_region(input, rect) {
+        Ok(loaded) => loaded,
+        Err(error) => {
+            return CommandResult::err("exposure", input_str, error)
+                .with_elapsed_ms(start.elapsed().as_millis() as u64);
+        }
+    };
+
+    // Validate spot point is within region
+    if let Some(sp) = spot_point {
+        if sp.x < region.x || sp.x >= region.right() || sp.y < region.y || sp.y >= region.bottom() {
+            return CommandResult::err(
+                "exposure",
+                input_str,
+                ErrorInfo::with_message(
+                    crate::error::ErrorCode::InvalidCoordinates,
+                    "spot point is outside the region",
+                ),
+            )
+            .with_elapsed_ms(start.elapsed().as_millis() as u64);
+        }
+    }
+
+    let weighted_mean_luma = match mode {
+        MeteringMode::Evaluative => {
+            let mut sum = 0.0f64;
+            let mut count = 0u64;
+            iterate_region(region, |x, y| {
+                sum += luma(img.get_pixel(x, y).0);
+                count += 1;
+            });
+            if count == 0 { 0.0 } else { sum / count as f64 }
+        }
+        MeteringMode::Spot => {
+            if let Some(sp) = spot_point {
+                luma(img.get_pixel(sp.x, sp.y).0)
+            } else {
+                0.0
+            }
+        }
+        MeteringMode::CenterWeighted => {
+            let cx = region.x as f64 + region.width as f64 / 2.0;
+            let cy = region.y as f64 + region.height as f64 / 2.0;
+            let sigma = (region.width.min(region.height)) as f64 / 3.0;
+            let two_sigma_sq = 2.0 * sigma * sigma;
+
+            let mut weighted_sum = 0.0f64;
+            let mut weight_total = 0.0f64;
+            iterate_region(region, |x, y| {
+                let dx = x as f64 - cx;
+                let dy = y as f64 - cy;
+                let w = (-(dx * dx + dy * dy) / two_sigma_sq).exp();
+                weighted_sum += w * luma(img.get_pixel(x, y).0);
+                weight_total += w;
+            });
+            if weight_total == 0.0 {
+                0.0
+            } else {
+                weighted_sum / weight_total
+            }
+        }
+        MeteringMode::HighlightWeighted => {
+            let mut lumas = Vec::new();
+            iterate_region(region, |x, y| {
+                lumas.push(luma(img.get_pixel(x, y).0));
+            });
+            if lumas.is_empty() {
+                0.0
+            } else {
+                lumas.sort_unstable_by(|a, b| b.partial_cmp(a).unwrap());
+                let top_n = ((lumas.len() as f64) * 0.1).ceil().max(1.0) as usize;
+                let sum: f64 = lumas[..top_n].iter().sum();
+                sum / top_n as f64
+            }
+        }
+    };
+
+    let ev = if weighted_mean_luma > 0.0 {
+        (weighted_mean_luma / 118.0).log2()
+    } else {
+        f64::NEG_INFINITY
+    };
+
+    let data = ExposureOutput {
+        source,
+        region,
+        metering: mode.as_str().to_string(),
+        ev,
+        assessment: assess_ev(ev).to_string(),
+        mean_luma: weighted_mean_luma,
+        spot_point,
+    };
+
+    CommandResult::ok("exposure", input_str, data)
+        .with_elapsed_ms(start.elapsed().as_millis() as u64)
+}
+
+/// Classify EV into under / correct / over (FD5: ±0.5 threshold).
+fn assess_ev(ev: f64) -> &'static str {
+    if ev < -0.5 {
+        "under"
+    } else if ev > 0.5 {
+        "over"
+    } else {
+        "correct"
+    }
+}
+
 fn load_region(
     input: &Path,
     rect: Option<Rect>,
@@ -319,6 +629,41 @@ fn load_region(
     )?;
 
     Ok((img, loaded.info, region))
+}
+
+fn measure_sharpness(img: &image::RgbaImage, region: Rect) -> SharpnessMetrics {
+    let mut sum = 0.0;
+    let mut sum_sq = 0.0;
+    let mut max_edge = 0.0_f64;
+    let mut count = 0u64;
+
+    if region.width >= 2 && region.height >= 2 {
+        for y in region.y..(region.bottom() - 1) {
+            for x in region.x..(region.right() - 1) {
+                let l = luma(img.get_pixel(x, y).0);
+                let right = luma(img.get_pixel(x + 1, y).0);
+                let down = luma(img.get_pixel(x, y + 1).0);
+                let edge = ((right - l).powi(2) + (down - l).powi(2)).sqrt();
+                sum += edge;
+                sum_sq += edge * edge;
+                max_edge = max_edge.max(edge);
+                count += 1;
+            }
+        }
+    }
+
+    let mean = if count == 0 { 0.0 } else { sum / count as f64 };
+    let variance = if count == 0 {
+        0.0
+    } else {
+        (sum_sq / count as f64) - mean * mean
+    };
+
+    SharpnessMetrics {
+        score: variance.max(0.0),
+        mean_edge_strength: mean,
+        max_edge_strength: max_edge,
+    }
 }
 
 fn iterate_region(region: Rect, mut visit: impl FnMut(u32, u32)) {
@@ -350,6 +695,29 @@ fn percentile_bin(bins: &[u64], pixel_count: u64, pct: f64) -> u8 {
         }
     }
     255
+}
+
+fn build_channel_histogram(bins: &[u64], sum: u64, pixel_count: u64) -> ChannelHistogram {
+    let mean = sum as f64 / pixel_count as f64;
+    let mut clipping_low = 0u64;
+    let mut clipping_high = 0u64;
+    for (i, &count) in bins.iter().enumerate() {
+        if i <= 5 {
+            clipping_low += count;
+        }
+        if i >= 250 {
+            clipping_high += count;
+        }
+    }
+    ChannelHistogram {
+        bins: bins.to_vec(),
+        mean,
+        p05: percentile_bin(bins, pixel_count, 0.05),
+        p50: percentile_bin(bins, pixel_count, 0.50),
+        p95: percentile_bin(bins, pixel_count, 0.95),
+        clipping_low,
+        clipping_high,
+    }
 }
 
 #[cfg(test)]
@@ -385,17 +753,68 @@ mod tests {
     }
 
     #[test]
+    fn focus_map_splits_grid_with_remainder() {
+        let img = ImageBuffer::from_pixel(5, 3, Rgba([128, 128, 128, 255]));
+        let result = execute_focus_map(write_temp_image(img).as_ref(), None, 2, 2);
+        assert!(result.ok);
+        let data = result.data.unwrap();
+        assert_eq!(data.cells.len(), 4);
+        assert_eq!(data.cells[0].region.width, 2);
+        assert_eq!(data.cells[0].region.height, 1);
+        assert_eq!(data.cells[3].region.width, 3);
+        assert_eq!(data.cells[3].region.height, 2);
+        assert_eq!(data.best_cell.region.width, 2);
+    }
+
+    #[test]
+    fn focus_map_best_cell_tracks_sharpest_region() {
+        let img = ImageBuffer::from_fn(8, 4, |x, y| {
+            if x < 4 {
+                Rgba([120, 120, 120, 255])
+            } else if y < 2 && x % 2 == 0 {
+                Rgba([0, 0, 0, 255])
+            } else {
+                Rgba([255, 255, 255, 255])
+            }
+        });
+        let result = execute_focus_map(write_temp_image(img).as_ref(), None, 1, 2);
+        assert!(result.ok);
+        let data = result.data.unwrap();
+        assert_eq!(data.best_cell.col, 1);
+        assert!(data.best_cell.sharpness.score > data.cells[0].sharpness.score);
+        assert_eq!(data.focus_point.x, 6);
+        assert_eq!(data.focus_point.y, 2);
+    }
+
+    #[test]
+    fn focus_map_rejects_zero_rows() {
+        let img = ImageBuffer::from_pixel(4, 4, Rgba([128, 128, 128, 255]));
+        let result = execute_focus_map(write_temp_image(img).as_ref(), None, 0, 2);
+        assert!(!result.ok);
+        assert_eq!(result.error.unwrap().code, "INVALID_PARAMETERS");
+    }
+
+    #[test]
+    fn focus_map_rejects_grid_larger_than_region() {
+        let img = ImageBuffer::from_pixel(4, 4, Rgba([128, 128, 128, 255]));
+        let result = execute_focus_map(write_temp_image(img).as_ref(), None, 5, 1);
+        assert!(!result.ok);
+        assert_eq!(result.error.unwrap().code, "INVALID_PARAMETERS");
+    }
+
+    #[test]
     fn histogram_reports_expected_median() {
         let img = ImageBuffer::from_fn(2, 2, |x, y| match (x, y) {
             (0, 0) | (0, 1) => Rgba([0, 0, 0, 255]),
             _ => Rgba([255, 255, 255, 255]),
         });
-        let result = execute_histogram(write_temp_image(img).as_ref(), None);
+        let result = execute_histogram(write_temp_image(img).as_ref(), None, false);
         assert!(result.ok);
         let histogram = result.data.unwrap().histogram;
         assert_eq!(histogram.pixel_count, 4);
         assert_eq!(histogram.p05_luma, 0);
         assert_eq!(histogram.p95_luma, 255);
+        assert!(histogram.rgb.is_none());
     }
 
     #[test]
@@ -457,5 +876,285 @@ mod tests {
         );
         assert!(!result.ok);
         assert_eq!(result.error.unwrap().code, "INVALID_COORDINATES");
+    }
+
+    // ── histogram --rgb tests ──────────────────────────────────────────
+
+    #[test]
+    fn histogram_rgb_reports_three_channels() {
+        let img = ImageBuffer::from_fn(2, 2, |_, _| Rgba([200, 100, 50, 255]));
+        let result = execute_histogram(write_temp_image(img).as_ref(), None, true);
+        assert!(result.ok);
+        let histogram = result.data.unwrap().histogram;
+        let rgb = histogram.rgb.as_ref().unwrap();
+        assert_eq!(rgb.r.p50, 200);
+        assert_eq!(rgb.g.p50, 100);
+        assert_eq!(rgb.b.p50, 50);
+        assert_eq!(rgb.r.bins.len(), 256);
+    }
+
+    #[test]
+    fn histogram_rgb_off_returns_none() {
+        let img = ImageBuffer::from_pixel(4, 4, Rgba([128, 128, 128, 255]));
+        let result = execute_histogram(write_temp_image(img).as_ref(), None, false);
+        assert!(result.ok);
+        assert!(result.data.unwrap().histogram.rgb.is_none());
+    }
+
+    #[test]
+    fn histogram_rgb_channel_clipping() {
+        // Red channel fully overexposed, G/B normal
+        let img = ImageBuffer::from_pixel(4, 4, Rgba([253, 100, 100, 255]));
+        let result = execute_histogram(write_temp_image(img).as_ref(), None, true);
+        assert!(result.ok);
+        let rgb = result.data.unwrap().histogram.rgb.unwrap();
+        assert!(rgb.r.clipping_high > 0);
+        assert_eq!(rgb.g.clipping_high, 0);
+        assert_eq!(rgb.b.clipping_high, 0);
+    }
+
+    // ── zone-map tests ─────────────────────────────────────────────────
+
+    #[test]
+    fn zone_map_black_image() {
+        let img = ImageBuffer::from_pixel(8, 8, Rgba([0, 0, 0, 255]));
+        let result = execute_zone_map(write_temp_image(img).as_ref(), None);
+        assert!(result.ok);
+        let data = result.data.unwrap();
+        assert_eq!(data.zones.len(), 11);
+        assert_eq!(data.zones[0].pixel_count, 64);
+        assert!((data.zones[0].ratio - 1.0).abs() < f64::EPSILON);
+        for z in &data.zones[1..] {
+            assert_eq!(z.pixel_count, 0);
+        }
+    }
+
+    #[test]
+    fn zone_map_white_image() {
+        let img = ImageBuffer::from_pixel(8, 8, Rgba([255, 255, 255, 255]));
+        let result = execute_zone_map(write_temp_image(img).as_ref(), None);
+        assert!(result.ok);
+        let data = result.data.unwrap();
+        assert_eq!(data.zones[10].pixel_count, 64);
+        assert_eq!(data.zones[10].label, "X");
+        for z in &data.zones[0..10] {
+            assert_eq!(z.pixel_count, 0);
+        }
+    }
+
+    #[test]
+    fn zone_map_gradient_has_all_zones() {
+        let img = ImageBuffer::from_fn(256, 1, |x, _| {
+            let v = x as u8;
+            Rgba([v, v, v, 255])
+        });
+        let result = execute_zone_map(write_temp_image(img).as_ref(), None);
+        assert!(result.ok);
+        let data = result.data.unwrap();
+        // All 11 zones should have pixels
+        for z in &data.zones {
+            assert!(z.pixel_count > 0, "Zone {} should have pixels", z.label);
+        }
+        // Ratio sum should be ~1.0
+        let ratio_sum: f64 = data.zones.iter().map(|z| z.ratio).sum();
+        assert!((ratio_sum - 1.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn zone_map_representative_rect_in_bounds() {
+        let img = ImageBuffer::from_fn(256, 1, |x, _| {
+            let v = x as u8;
+            Rgba([v, v, v, 255])
+        });
+        let result = execute_zone_map(write_temp_image(img).as_ref(), None);
+        assert!(result.ok);
+        let data = result.data.unwrap();
+        for z in &data.zones {
+            if z.pixel_count > 0 {
+                let r = &z.representative_rect;
+                assert!(r.x < 256);
+                assert!(r.y < 1);
+            }
+        }
+    }
+
+    // ── exposure tests ─────────────────────────────────────────────────
+
+    #[test]
+    fn exposure_correct_image_ev_near_zero() {
+        // luma ≈ 118 (sRGB mid-gray)
+        let img = ImageBuffer::from_pixel(8, 8, Rgba([118, 118, 118, 255]));
+        let result = execute_exposure(
+            write_temp_image(img).as_ref(),
+            None,
+            MeteringMode::Evaluative,
+            None,
+        );
+        assert!(result.ok);
+        let data = result.data.unwrap();
+        assert!(data.ev.abs() < 0.3, "ev should be near 0, got {}", data.ev);
+        assert_eq!(data.assessment, "correct");
+        assert_eq!(data.metering, "evaluative");
+    }
+
+    #[test]
+    fn exposure_over_image() {
+        // luma=240: EV = log2(240/118) ≈ 1.02
+        let img = ImageBuffer::from_pixel(8, 8, Rgba([240, 240, 240, 255]));
+        let result = execute_exposure(
+            write_temp_image(img).as_ref(),
+            None,
+            MeteringMode::Evaluative,
+            None,
+        );
+        assert!(result.ok);
+        let data = result.data.unwrap();
+        assert!(data.ev > 0.5, "ev should be > 0.5, got {}", data.ev);
+        assert_eq!(data.assessment, "over");
+    }
+
+    #[test]
+    fn exposure_under_image() {
+        let img = ImageBuffer::from_pixel(8, 8, Rgba([30, 30, 30, 255]));
+        let result = execute_exposure(
+            write_temp_image(img).as_ref(),
+            None,
+            MeteringMode::Evaluative,
+            None,
+        );
+        assert!(result.ok);
+        let data = result.data.unwrap();
+        assert!(data.ev < -1.0);
+        assert_eq!(data.assessment, "under");
+    }
+
+    #[test]
+    fn exposure_spot_mode() {
+        let img = ImageBuffer::from_fn(8, 8, |x, _| {
+            if x < 4 {
+                Rgba([0, 0, 0, 255])
+            } else {
+                Rgba([255, 255, 255, 255])
+            }
+        });
+        // Spot at bright area
+        let result = execute_exposure(
+            write_temp_image(img).as_ref(),
+            None,
+            MeteringMode::Spot,
+            Some(Point { x: 6, y: 0 }),
+        );
+        assert!(result.ok);
+        let data = result.data.unwrap();
+        assert_eq!(data.metering, "spot");
+        assert!(data.ev > 0.5);
+        assert_eq!(data.spot_point, Some(Point { x: 6, y: 0 }));
+    }
+
+    #[test]
+    fn exposure_spot_out_of_region_returns_error() {
+        let img = ImageBuffer::from_pixel(4, 4, Rgba([128, 128, 128, 255]));
+        let result = execute_exposure(
+            write_temp_image(img).as_ref(),
+            None,
+            MeteringMode::Spot,
+            Some(Point { x: 10, y: 10 }),
+        );
+        assert!(!result.ok);
+        assert_eq!(result.error.unwrap().code, "INVALID_COORDINATES");
+    }
+
+    #[test]
+    fn exposure_center_weighted_favors_center() {
+        // Center bright, edges dark
+        let make_img = || {
+            ImageBuffer::from_fn(10, 10, |x, y| {
+                let cx = 5.0_f64;
+                let cy = 5.0_f64;
+                let d = ((x as f64 - cx).powi(2) + (y as f64 - cy).powi(2)).sqrt();
+                if d < 3.0 {
+                    Rgba([255, 255, 255, 255])
+                } else {
+                    Rgba([20, 20, 20, 255])
+                }
+            })
+        };
+        let eval = execute_exposure(
+            write_temp_image(make_img()).as_ref(),
+            None,
+            MeteringMode::Evaluative,
+            None,
+        );
+        let cw = execute_exposure(
+            write_temp_image(make_img()).as_ref(),
+            None,
+            MeteringMode::CenterWeighted,
+            None,
+        );
+        assert!(eval.ok);
+        assert!(cw.ok);
+        assert!(
+            cw.data.as_ref().unwrap().mean_luma > eval.data.as_ref().unwrap().mean_luma,
+            "center-weighted should be higher than evaluative when center is brighter"
+        );
+    }
+
+    #[test]
+    fn exposure_highlight_weighted_uses_top10() {
+        let img = ImageBuffer::from_fn(10, 10, |x, _| {
+            if x == 0 {
+                Rgba([255, 255, 255, 255]) // 10 pixels at 255
+            } else {
+                Rgba([20, 20, 20, 255]) // 90 pixels at 20
+            }
+        });
+        let result = execute_exposure(
+            write_temp_image(img).as_ref(),
+            None,
+            MeteringMode::HighlightWeighted,
+            None,
+        );
+        assert!(result.ok);
+        let data = result.data.unwrap();
+        // Top 10% are the 10 bright pixels (luma=255), so mean_luma ≈ 255
+        assert!(
+            data.mean_luma > 240.0,
+            "highlight-weighted should favor top 10%, got {}",
+            data.mean_luma
+        );
+    }
+
+    #[test]
+    fn exposure_assessment_boundaries() {
+        // EV boundary: -0.5 is the edge between under and correct
+        // luma where ev = -0.5: luma = 118 * 2^(-0.5) ≈ 83.4
+        let img_under = ImageBuffer::from_pixel(4, 4, Rgba([80, 80, 80, 255]));
+        let r = execute_exposure(
+            write_temp_image(img_under).as_ref(),
+            None,
+            MeteringMode::Evaluative,
+            None,
+        );
+        assert_eq!(r.data.unwrap().assessment, "under");
+
+        // luma where ev = 0.5: luma = 118 * 2^(0.5) ≈ 166.9
+        let img_over = ImageBuffer::from_pixel(4, 4, Rgba([170, 170, 170, 255]));
+        let r = execute_exposure(
+            write_temp_image(img_over).as_ref(),
+            None,
+            MeteringMode::Evaluative,
+            None,
+        );
+        assert_eq!(r.data.unwrap().assessment, "over");
+
+        // luma ≈ 118 → correct
+        let img_ok = ImageBuffer::from_pixel(4, 4, Rgba([118, 118, 118, 255]));
+        let r = execute_exposure(
+            write_temp_image(img_ok).as_ref(),
+            None,
+            MeteringMode::Evaluative,
+            None,
+        );
+        assert_eq!(r.data.unwrap().assessment, "correct");
     }
 }

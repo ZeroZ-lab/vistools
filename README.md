@@ -136,6 +136,22 @@ vistools sample src.png --rect 100,80,40,40
 
 Point mode returns `rgba`, `rgb`, lowercase `hex`, and `alpha`. Rect mode returns the rounded average color, `alpha_stats` (`min`, `max`, `average`, `transparent_ratio`), and `pixel_count`. `sample` is read-only and does not create an output image.
 
+### Photography metrics
+
+These commands are read-only and return structured JSON for photographic inspection:
+
+```bash
+vistools histogram src.jpg --rgb
+vistools zone-map src.jpg
+vistools exposure src.jpg --mode evaluative
+vistools focus-map src.jpg --rows 3 --cols 4
+```
+
+- `histogram --rgb` adds per-channel R/G/B histograms without changing the default luminance-only output.
+- `zone-map` maps luminance into Zone System `0..X`, with per-zone ratios and representative source coordinates.
+- `exposure` estimates `ev`, supports `evaluative`, `spot`, `center-weighted`, and `highlight-weighted`, and classifies the result as `under` / `correct` / `over`.
+- `focus-map` splits the image or `--rect` region into an `N x M` grid and returns per-cell sharpness, the `best_cell`, and a `focus_point` you can drill into with `viewport`.
+
 ### Help & version
 
 ```bash

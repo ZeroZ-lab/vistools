@@ -4,7 +4,7 @@
 //! paths, elapsed time, file size, or exact image dimensions.
 
 use assert_cmd::Command;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::path::PathBuf;
 
 fn bin() -> Command {
@@ -566,6 +566,280 @@ fn color_cast_success_schema_snapshot() {
                     "cast_vector": ["number"],
                     "cast_strength": "number",
                     "dominant_channel": "string"
+                }
+            },
+            "warnings": [],
+            "elapsed_ms": "number"
+        })
+    );
+}
+
+#[test]
+fn histogram_rgb_schema_snapshot() {
+    let actual = run_json(&[
+        "histogram".to_string(),
+        fixture("64x64.png").display().to_string(),
+        "--rgb".to_string(),
+    ]);
+
+    assert_eq!(
+        shape(&actual),
+        json!({
+            "ok": "bool",
+            "operation": "string",
+            "input": "string",
+            "data": {
+                "source": {
+                    "width": "number",
+                    "height": "number",
+                    "format": "string",
+                    "size_bytes": "number"
+                },
+                "region": {
+                    "x": "number",
+                    "y": "number",
+                    "width": "number",
+                    "height": "number"
+                },
+                "histogram": {
+                    "bins": ["number"],
+                    "pixel_count": "number",
+                    "mean_luma": "number",
+                    "median_luma": "number",
+                    "p05_luma": "number",
+                    "p95_luma": "number",
+                    "rgb": {
+                        "r": {
+                            "bins": ["number"],
+                            "mean": "number",
+                            "p05": "number",
+                            "p50": "number",
+                            "p95": "number",
+                            "clipping_low": "number",
+                            "clipping_high": "number"
+                        },
+                        "g": {
+                            "bins": ["number"],
+                            "mean": "number",
+                            "p05": "number",
+                            "p50": "number",
+                            "p95": "number",
+                            "clipping_low": "number",
+                            "clipping_high": "number"
+                        },
+                        "b": {
+                            "bins": ["number"],
+                            "mean": "number",
+                            "p05": "number",
+                            "p50": "number",
+                            "p95": "number",
+                            "clipping_low": "number",
+                            "clipping_high": "number"
+                        }
+                    }
+                }
+            },
+            "warnings": [],
+            "elapsed_ms": "number"
+        })
+    );
+}
+
+#[test]
+fn zone_map_schema_snapshot() {
+    let actual = run_json(&[
+        "zone-map".to_string(),
+        fixture("64x64.png").display().to_string(),
+    ]);
+
+    assert_eq!(
+        shape(&actual),
+        json!({
+            "ok": "bool",
+            "operation": "string",
+            "input": "string",
+            "data": {
+                "source": {
+                    "width": "number",
+                    "height": "number",
+                    "format": "string",
+                    "size_bytes": "number"
+                },
+                "region": {
+                    "x": "number",
+                    "y": "number",
+                    "width": "number",
+                    "height": "number"
+                },
+                "zones": [{
+                    "zone": "number",
+                    "label": "string",
+                    "luma_range": ["number"],
+                    "pixel_count": "number",
+                    "ratio": "number",
+                    "representative_rect": {
+                        "x": "number",
+                        "y": "number",
+                        "width": "number",
+                        "height": "number"
+                    }
+                }]
+            },
+            "warnings": [],
+            "elapsed_ms": "number"
+        })
+    );
+}
+
+#[test]
+fn exposure_schema_snapshot() {
+    let actual = run_json(&[
+        "exposure".to_string(),
+        fixture("64x64.png").display().to_string(),
+    ]);
+
+    assert_eq!(
+        shape(&actual),
+        json!({
+            "ok": "bool",
+            "operation": "string",
+            "input": "string",
+            "data": {
+                "source": {
+                    "width": "number",
+                    "height": "number",
+                    "format": "string",
+                    "size_bytes": "number"
+                },
+                "region": {
+                    "x": "number",
+                    "y": "number",
+                    "width": "number",
+                    "height": "number"
+                },
+                "metering": "string",
+                "ev": "number",
+                "assessment": "string",
+                "mean_luma": "number"
+            },
+            "warnings": [],
+            "elapsed_ms": "number"
+        })
+    );
+}
+
+#[test]
+fn exposure_spot_schema_snapshot() {
+    let actual = run_json(&[
+        "exposure".to_string(),
+        fixture("64x64.png").display().to_string(),
+        "--mode".to_string(),
+        "spot".to_string(),
+        "--x".to_string(),
+        "32".to_string(),
+        "--y".to_string(),
+        "32".to_string(),
+    ]);
+
+    assert_eq!(
+        shape(&actual),
+        json!({
+            "ok": "bool",
+            "operation": "string",
+            "input": "string",
+            "data": {
+                "source": {
+                    "width": "number",
+                    "height": "number",
+                    "format": "string",
+                    "size_bytes": "number"
+                },
+                "region": {
+                    "x": "number",
+                    "y": "number",
+                    "width": "number",
+                    "height": "number"
+                },
+                "metering": "string",
+                "ev": "number",
+                "assessment": "string",
+                "mean_luma": "number",
+                "spot_point": {
+                    "x": "number",
+                    "y": "number"
+                }
+            },
+            "warnings": [],
+            "elapsed_ms": "number"
+        })
+    );
+}
+
+#[test]
+fn focus_map_schema_snapshot() {
+    let actual = run_json(&[
+        "focus-map".to_string(),
+        fixture("64x64.png").display().to_string(),
+        "--rows".to_string(),
+        "2".to_string(),
+        "--cols".to_string(),
+        "2".to_string(),
+    ]);
+
+    assert_eq!(
+        shape(&actual),
+        json!({
+            "ok": "bool",
+            "operation": "string",
+            "input": "string",
+            "data": {
+                "source": {
+                    "width": "number",
+                    "height": "number",
+                    "format": "string",
+                    "size_bytes": "number"
+                },
+                "region": {
+                    "x": "number",
+                    "y": "number",
+                    "width": "number",
+                    "height": "number"
+                },
+                "rows": "number",
+                "cols": "number",
+                "cells": [{
+                    "row": "number",
+                    "col": "number",
+                    "region": {
+                        "x": "number",
+                        "y": "number",
+                        "width": "number",
+                        "height": "number"
+                    },
+                    "sharpness": {
+                        "score": "number",
+                        "mean_edge_strength": "number",
+                        "max_edge_strength": "number"
+                    }
+                }],
+                "best_cell": {
+                    "row": "number",
+                    "col": "number",
+                    "region": {
+                        "x": "number",
+                        "y": "number",
+                        "width": "number",
+                        "height": "number"
+                    },
+                    "sharpness": {
+                        "score": "number",
+                        "mean_edge_strength": "number",
+                        "max_edge_strength": "number"
+                    }
+                },
+                "focus_point": {
+                    "x": "number",
+                    "y": "number"
                 }
             },
             "warnings": [],

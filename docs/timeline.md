@@ -174,3 +174,101 @@
   - v0.3 sample：点/区域取色器 + alpha 统计
   - 文档：roadmap.md（LLM 视觉仪器层路线图）
 - 测试：77 passed（52 单元 + 18 集成 + 7 schema 快照），clippy 0 warnings
+
+### 2026-06-02 — v1 原子命令面收敛
+- 产出：docs/features/v1-agent-command-surface/contract.md + changelog.md
+- 结论：`vistools` v1 收敛为三层命令面：视野层（inspect/overview/tile/viewport）、测量层（sample/diff/measure）、断言层（assert-color/assert-diff/assert-region）
+- 明确排除：行业业务命令、通用像素处理、OCR/检测/分割、内建 orchestrator、自然语言报告
+- 产品定位进一步收紧：不是图像处理库，而是 Agent 的视觉测量命令面 + 坐标化证据层
+
+### 2026-06-02 — 摄影计量能力探索
+- 产出：docs/features/photography-metering/idea-brief.md（4 个方向，1 轮收敛，推荐：影调计量为核心）
+- 核心结论：在现有 photo.rs 6 个命令基础上，扩展摄影语言级计量能力
+- P0 MVP：histogram 增强（+RGB 通道）+ zone-map（Zone System 分区）+ exposure（EV 估算 + 测光模式）
+- P1 扩展：focus-map（焦点地图）+ white-balance（色温估算）
+- P2 进阶：gamut（色域检查）+ noise（噪声估算）
+- 目标场景：Agent 帮摄影师批量质检照片
+
+### 2026-06-02 — 摄影计量初始化
+- 产出：project.md 更新（PD7-PD9）+ AGENTS.md 同步 v0.2.3 结构
+- PD7：摄影计量算法——纯像素数学，不加新依赖，手写 sRGB→Lab 变换
+- PD8：模块归属——全部在 photo.rs 内扩展，不加新模块
+- PD9：histogram 向后兼容——--rgb flag 增量输出
+- AGENTS.md 同步：反映 v0.2.3 重构后的实际目录结构（core 9 模块 + CLI commands/ 分层）
+- Phase 3 跳过：纯 CLI 无前端
+
+### 2026-06-02 — 摄影计量需求定义
+- 产出：docs/features/photography-metering/PRD.md（3 个用户故事，19 个验收条件）
+- US-01: histogram --rgb（AC-01-1~4：RGB 三通道直方图 + 向后兼容 + rect + clipping）
+- US-02: zone-map（AC-02-1~5：11 区分布 + 纯黑/纯白边界 + rect + 代表区域映射）
+- US-03: exposure（AC-03-1~10：4 种测光模式 + assessment 三档 + 参数校验 + rect + 边界值）
+- 范围排除：gamma 反转 Zone / RGB Zone / EV 绝对值 / 自动建议 / P1+ 命令
+
+### 2026-06-02 — 摄影计量详设
+- 产出：docs/features/photography-metering/contract.md（FD1-FD6）
+- FD1: histogram --rgb 增量输出（Option<RgbHistogram>，不传时无 rgb 字段）
+- FD2: Zone System 线性 11 区（luma * 11 / 256，Zone V = 116-139 ≈ 118 中灰）
+- FD3: EV = log2(weighted_mean_luma / 118.0)
+- FD4: 4 种测光模式（evaluative / spot / center-weighted Gaussian / highlight-weighted top 10%）
+- FD5: assessment 三档（under < -0.5 / correct -0.5..0.5 / over > 0.5）
+- FD6: CLI 参数（histogram 新增 HistogramArgs + --rgb bool；zone-map 复用 RegionArgs；exposure 新增 ExposureArgs + --mode/--x/--y）
+- 新增类型：RgbHistogram / ChannelHistogram / ZoneMapOutput / ZoneInfo / ExposureOutput
+- 修改类型：HistogramMetrics 新增 rgb: Option<RgbHistogram>
+- Phase 1-3 跳过：纯 CLI，无前端/后端/数据库
+
+### 2026-06-02 — 摄影计量任务分解
+- 产出：docs/features/photography-metering/plan.md（4 个任务）+ testing/test-cases.md（23 个用例骨架）
+- Task-01: histogram --rgb 增强（修改现有命令，风险最高先验证）
+- Task-02: zone-map 新命令（新命令，与 Task-03 并行）
+- Task-03: exposure 新命令（4 种测光模式，与 Task-02 并行）
+- Task-04: schema snapshot + 集成验证（全量回归）
+- 关键路径：Task-01 → Task-02/03 → Task-04
+- 预估：~4h
+
+### 2026-06-02 — 摄影计量测试策略
+- 产出：docs/features/photography-metering/testing/contract.md（T1-T5）
+- T1: 单元 65% + 集成 20% + Schema 快照 15%
+- T2: 关键路径全覆盖（zone_index / weighted_luma / EV / 4 种测光模式）
+- T3: tempfile 临时图（纯色/渐变/精确亮度），无共享 fixture
+- T4: 无 Mock（纯本地库，全部真实调用）
+- T5: cargo test + clippy + fmt，失败阻断合并
+
+### 2026-06-02 — 摄影计量 P0 构建完成
+- 产出：histogram --rgb / zone-map / exposure 三个命令实现 + 35 个新测试
+- histogram --rgb：R/G/B 三通道直方图 + 分位数 + 通道级 clipping（AC-01-1~4）
+- zone-map：Zone System 11 区分布 + 代表区域坐标（AC-02-1~5）
+- exposure：EV 估算 + 4 种测光模式 + assessment 三档（AC-03-1~10）
+- 单元测试：19 个（photo.rs）
+- 集成测试：12 个（CLI 参数解析 + JSON 输出 + 错误处理）
+- Schema snapshot：4 个（histogram --rgb / zone-map / exposure / exposure spot）
+- 向后兼容：histogram 不带 --rgb 时输出不变（无 rgb 字段）
+- 验证：117 tests passed（82 core + 35 integration），clippy 0 warnings，fmt clean
+
+### 2026-06-02 — 摄影计量验收阶段定义
+- 产出：docs/features/photography-metering/acceptance.md
+- 决策：P0 build 后先做真实照片验收，不直接进入 P1（focus-map / white-balance）
+- 验收目标：
+  - 验证 `histogram --rgb` 是否比亮度直方图提供增量判断信息
+  - 验证 `zone-map` 在真实照片上的分区语义是否稳定
+  - 验证 `exposure.assessment` 与人工曝光标签一致率是否达到 80%
+- 输出：样本要求、执行命令、人工记录模板、通过/不通过后的决策出口
+
+### 2026-06-02 — 摄影计量 P1 focus-map 实现
+- 触发：用户明确要求直接开始写代码，跳过“先完成真实照片验收再进入 P1”的建议顺序
+- 新增命令：`vistools focus-map <INPUT> --rows <N> --cols <M>`
+- 输出：NxM 网格锐度矩阵、`best_cell`、`focus_point`
+- 实现方式：在 `photo.rs` 内复用现有 sharpness 核，按 tile 式 remainder 策略切分 cell
+- CLI：新增 `FocusMapArgs` 与 `focus-map` 子命令注册
+- 测试：新增 core 单测、CLI 集成测试、schema snapshot
+- 验证：141 tests passed（86 core + 38 integration + 17 schema），clippy 0 warnings，fmt clean
+
+### 2026-06-02 — v0.2.3 架构扩展性重构
+- 版本：0.2.2 → 0.2.3
+- core 拆分：`types` 历史聚合层收敛为 `constants` / `error` / `geom` / `protocol` / `source` / `region`
+- 命令实现切到统一基础设施：`overview` / `tile` / `viewport` / `sample` / `photo` 复用统一 source 加载与 region 校验
+- CLI 拆分：`main.rs` 仅保留注册和 dispatch；新增 `commands/` 与 `parse.rs`
+- 协议收敛：
+  - `CoordinateMapping` 从 `crop_origin_in_source + scale_factor` 改为 `source_origin + scale_x + scale_y`
+  - `ViewportOutput.crop` 从动态 `mode + params` 改为强类型 `CropSpec`
+- 正确性修复：anchor 模式超源图请求时，输出 `crop.region`、实际结果尺寸和 mapping 保持一致
+- 验证：104 tests passed（67 core 单测 + 25 CLI 集成 + 12 schema snapshot），fmt clean，clippy 0 warnings

@@ -192,6 +192,25 @@ pub struct SharpnessOutput {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FocusMapOutput {
+    pub source: SourceInfo,
+    pub region: Rect,
+    pub rows: u32,
+    pub cols: u32,
+    pub cells: Vec<FocusCell>,
+    pub best_cell: FocusCell,
+    pub focus_point: Point,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FocusCell {
+    pub row: u32,
+    pub col: u32,
+    pub region: Rect,
+    pub sharpness: SharpnessMetrics,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SharpnessMetrics {
     pub score: f64,
     pub mean_edge_strength: f64,
@@ -213,6 +232,69 @@ pub struct HistogramMetrics {
     pub median_luma: u8,
     pub p05_luma: u8,
     pub p95_luma: u8,
+    /// RGB per-channel histograms. Only present when `--rgb` is passed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rgb: Option<RgbHistogram>,
+}
+
+/// Per-channel histogram for R, G, or B.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChannelHistogram {
+    pub bins: Vec<u64>,
+    pub mean: f64,
+    pub p05: u8,
+    pub p50: u8,
+    pub p95: u8,
+    pub clipping_low: u64,
+    pub clipping_high: u64,
+}
+
+/// RGB three-channel histogram.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RgbHistogram {
+    pub r: ChannelHistogram,
+    pub g: ChannelHistogram,
+    pub b: ChannelHistogram,
+}
+
+/// Zone System (Ansel Adams) tonal distribution.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ZoneMapOutput {
+    pub source: SourceInfo,
+    pub region: Rect,
+    pub zones: Vec<ZoneInfo>,
+}
+
+/// A single zone in the Zone System (0 through X).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ZoneInfo {
+    /// Numeric zone index 0–10.
+    pub zone: u8,
+    /// Roman numeral label: "0", "I", "II", ..., "X".
+    pub label: String,
+    /// Luma range [low, high] that maps to this zone.
+    pub luma_range: (u8, u8),
+    pub pixel_count: u64,
+    pub ratio: f64,
+    /// A representative source-image rect containing at least one pixel in this zone.
+    pub representative_rect: Rect,
+}
+
+/// Exposure assessment output.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExposureOutput {
+    pub source: SourceInfo,
+    pub region: Rect,
+    /// "evaluative", "spot", "center_weighted", or "highlight_weighted".
+    pub metering: String,
+    /// Exposure value offset (0 = correct).
+    pub ev: f64,
+    /// "under", "correct", or "over".
+    pub assessment: String,
+    pub mean_luma: f64,
+    /// Present only when metering = "spot".
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub spot_point: Option<Point>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

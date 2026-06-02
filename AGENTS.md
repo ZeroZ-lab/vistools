@@ -48,38 +48,63 @@ vistools/
 │   ├── project.md
 │   ├── idea-brief.md
 │   ├── timeline.md
-│   └── status.md
+│   ├── status.md
+│   └── features/
+│       ├── phase1-viewport-commands/
+│       ├── v1-agent-command-surface/
+│       └── photography-metering/
 ├── crates/
 │   ├── core/src/
 │   │   ├── lib.rs
-│   │   ├── types.rs       # Point/Rect/Percent/Anchor/Size/CommandResult
-│   │   ├── guard.rs       # Agent-safe 校验
-│   │   ├── coord.rs       # 坐标计算 + 映射
+│   │   ├── constants.rs    # 共享常量
+│   │   ├── error.rs        # 稳定错误码 + ErrorInfo
+│   │   ├── geom.rs         # Point/Rect/Percent/Anchor/Size
+│   │   ├── protocol.rs     # CommandResult<T> + 所有 Output/Metrics 类型
+│   │   ├── source.rs       # 图片加载、metadata、format 推断、像素限制
+│   │   ├── region.rs       # anchor/percent/rect 解析、clamp、mapping
+│   │   ├── coord.rs        # 坐标计算 + 映射
+│   │   ├── guard.rs        # Agent-safe 校验
+│   │   ├── util.rs         # 共享 save_image
 │   │   ├── inspect.rs
 │   │   ├── overview.rs
 │   │   ├── tile.rs
-│   │   └── viewport.rs
+│   │   ├── viewport.rs
+│   │   ├── sample.rs       # 取色器
+│   │   ├── photo.rs        # 摄影计量（sharpness/histogram/clipping/contrast/color-cast/zone-map/exposure/focus-map/white-balance）
+│   │   └── test_support.rs # 测试 fixture 路径工具
 │   └── cli/
-│       ├── src/main.rs    # CLI 入口（clap）
-│       └── tests/integration_test.rs
+│       ├── src/
+│       │   ├── main.rs         # CLI 入口（命令注册 + dispatch）
+│       │   ├── parse.rs        # 共享 CLI 参数解析
+│       │   └── commands/       # 每个命令的 clap 参数 + 调用适配
+│       │       ├── mod.rs
+│       │       ├── inspect.rs
+│       │       ├── overview.rs
+│       │       ├── tile.rs
+│       │       ├── viewport.rs
+│       │       ├── sample.rs
+│       │       └── photo.rs
+│       └── tests/
+│           ├── integration_test.rs
+│           └── schema_snapshot_test.rs
 ├── fixtures/
 │   ├── 64x64.png
 │   ├── 256x256.png
 │   ├── 1000x1000.png
 │   └── e2e/
-│       ├── landscape_large.jpg     # 3200x2400 风景（触发 overview）
-│       ├── portrait_tall.jpg       # 1200x3000 竖长图
-│       ├── panorama_wide.jpg       # 4000x1500 宽幅全景
-│       ├── urban_square.jpg        # 2000x2000 城市建筑
-│       ├── screenshot_like.jpg     # 1920x1080 类截图
-│       ├── nature_small.jpg        # 400x300 小图（不触发 overview）
-│       └── nature_small.png        # 400x300 PNG 格式测试
-└── docs/                           # 设计决策 + 时间线 + 合约
+│       ├── landscape_large.jpg
+│       ├── portrait_tall.jpg
+│       ├── panorama_wide.jpg
+│       ├── urban_square.jpg
+│       ├── screenshot_like.jpg
+│       ├── nature_small.jpg
+│       └── nature_small.png
+└── docs/
 ```
 
 ## 工作流
 
-- 新命令 → 先写 coord.rs 类型 + output.rs schema，再写命令逻辑
+- 新命令 → 先写 protocol.rs 类型，再写 photo.rs 逻辑，再写 CLI 命令适配
 - 加功能 → 参考已有命令模式（clap derive + core 调用 + JSON 输出）
 - 改决策 → 更新 project.md PD# 编号，重新审视受影响命令
 - 每个关键逻辑分支注释决策编号（FD# feature 级 / PD# 项目级）
@@ -114,6 +139,9 @@ vistools/
 - 输出是给 Agent 读的 JSON，不是给人读的文本
 - 坐标映射是核心：每个操作都要回答"这个输出在源图的什么位置"
 - 二进制 ≤8MB（Phase 1），无 C 依赖
+- 摄影计量全部只读，纯像素数学，不加新依赖（PD7）
+- 摄影计量命令全部在 photo.rs 内扩展，不加新模块（PD8）
+- histogram --rgb 向后兼容，不传 --rgb 时输出不变（PD9）
 
 ## 边界
 
@@ -122,6 +150,7 @@ vistools/
 - `cargo test` 通过再提交
 - 读 project.md 确认共享决策
 - 错误也返回结构化 JSON
+- 摄影计量命令复用 `load_region` / `iterate_region` 基础设施
 
 ### Ask First
 - 添加新依赖

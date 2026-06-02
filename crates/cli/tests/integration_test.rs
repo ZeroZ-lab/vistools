@@ -3,6 +3,7 @@
 //! Uses assert_cmd to test CLI invocations end-to-end.
 
 use assert_cmd::Command;
+use predicates::prelude::PredicateBooleanExt;
 use std::path::PathBuf;
 
 fn bin() -> Command {
@@ -431,6 +432,184 @@ fn sharpness_malformed_rect_returns_invalid_parameters() {
         .arg(fixture("64x64.png"))
         .arg("--rect")
         .arg("1,2,3")
+        .assert()
+        .code(1)
+        .stdout(predicates::str::contains("INVALID_PARAMETERS"));
+}
+
+#[test]
+fn histogram_rgb_success() {
+    bin()
+        .arg("histogram")
+        .arg(fixture("64x64.png"))
+        .arg("--rgb")
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("\"operation\": \"histogram\""))
+        .stdout(predicates::str::contains("\"rgb\""))
+        .stdout(predicates::str::contains("\"r\""))
+        .stdout(predicates::str::contains("\"g\""))
+        .stdout(predicates::str::contains("\"b\""));
+}
+
+#[test]
+fn histogram_without_rgb_has_no_rgb_field() {
+    bin()
+        .arg("histogram")
+        .arg(fixture("64x64.png"))
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("\"operation\": \"histogram\""))
+        .stdout(predicates::str::contains("\"mean_luma\""))
+        .stdout(predicates::str::contains("\"rgb\"").not());
+}
+
+#[test]
+fn zone_map_success() {
+    bin()
+        .arg("zone-map")
+        .arg(fixture("64x64.png"))
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("\"operation\": \"zone-map\""))
+        .stdout(predicates::str::contains("\"zones\""))
+        .stdout(predicates::str::contains("\"zone\""))
+        .stdout(predicates::str::contains("\"label\""))
+        .stdout(predicates::str::contains("\"ratio\""));
+}
+
+#[test]
+fn zone_map_malformed_rect_returns_invalid_parameters() {
+    bin()
+        .arg("zone-map")
+        .arg(fixture("64x64.png"))
+        .arg("--rect")
+        .arg("1,2")
+        .assert()
+        .code(1)
+        .stdout(predicates::str::contains("INVALID_PARAMETERS"));
+}
+
+#[test]
+fn exposure_evaluative_success() {
+    bin()
+        .arg("exposure")
+        .arg(fixture("64x64.png"))
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("\"operation\": \"exposure\""))
+        .stdout(predicates::str::contains("\"metering\": \"evaluative\""))
+        .stdout(predicates::str::contains("\"ev\""))
+        .stdout(predicates::str::contains("\"assessment\""));
+}
+
+#[test]
+fn exposure_spot_success() {
+    bin()
+        .arg("exposure")
+        .arg(fixture("64x64.png"))
+        .arg("--mode")
+        .arg("spot")
+        .arg("--x")
+        .arg("32")
+        .arg("--y")
+        .arg("32")
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("\"metering\": \"spot\""))
+        .stdout(predicates::str::contains("\"spot_point\""));
+}
+
+#[test]
+fn exposure_center_weighted_success() {
+    bin()
+        .arg("exposure")
+        .arg(fixture("64x64.png"))
+        .arg("--mode")
+        .arg("center-weighted")
+        .assert()
+        .success()
+        .stdout(predicates::str::contains(
+            "\"metering\": \"center_weighted\"",
+        ));
+}
+
+#[test]
+fn exposure_highlight_weighted_success() {
+    bin()
+        .arg("exposure")
+        .arg(fixture("64x64.png"))
+        .arg("--mode")
+        .arg("highlight-weighted")
+        .assert()
+        .success()
+        .stdout(predicates::str::contains(
+            "\"metering\": \"highlight_weighted\"",
+        ));
+}
+
+#[test]
+fn exposure_spot_missing_coordinates_returns_invalid_parameters() {
+    bin()
+        .arg("exposure")
+        .arg(fixture("64x64.png"))
+        .arg("--mode")
+        .arg("spot")
+        .assert()
+        .code(1)
+        .stdout(predicates::str::contains("INVALID_PARAMETERS"));
+}
+
+#[test]
+fn exposure_invalid_mode_returns_invalid_parameters() {
+    bin()
+        .arg("exposure")
+        .arg(fixture("64x64.png"))
+        .arg("--mode")
+        .arg("invalid-mode")
+        .assert()
+        .code(1)
+        .stdout(predicates::str::contains("INVALID_PARAMETERS"));
+}
+
+#[test]
+fn exposure_malformed_rect_returns_invalid_parameters() {
+    bin()
+        .arg("exposure")
+        .arg(fixture("64x64.png"))
+        .arg("--rect")
+        .arg("1,2,3")
+        .assert()
+        .code(1)
+        .stdout(predicates::str::contains("INVALID_PARAMETERS"));
+}
+
+#[test]
+fn focus_map_success() {
+    bin()
+        .arg("focus-map")
+        .arg(fixture("64x64.png"))
+        .arg("--rows")
+        .arg("2")
+        .arg("--cols")
+        .arg("2")
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("\"operation\": \"focus-map\""))
+        .stdout(predicates::str::contains("\"best_cell\""))
+        .stdout(predicates::str::contains("\"focus_point\""))
+        .stdout(predicates::str::contains("\"cells\""));
+}
+
+#[test]
+fn focus_map_invalid_grid_returns_invalid_parameters() {
+    bin()
+        .arg("focus-map")
+        .arg(fixture("64x64.png"))
+        .arg("--rows")
+        .arg("0")
+        .arg("--cols")
+        .arg("2")
         .assert()
         .code(1)
         .stdout(predicates::str::contains("INVALID_PARAMETERS"));
