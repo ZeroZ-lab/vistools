@@ -4,8 +4,11 @@
 use std::path::Path;
 use std::time::Instant;
 
+use crate::error::{ErrorCode, ErrorInfo};
+use crate::geom::Rect;
 use crate::guard;
-use crate::types::*;
+use crate::protocol::{CommandResult, TileInfo, TileOutput};
+use crate::source;
 
 /// Execute the tile command.
 pub fn execute(input: &Path, rows: u32, cols: u32, out_dir: &Path) -> CommandResult<TileOutput> {
@@ -26,38 +29,16 @@ pub fn execute(input: &Path, rows: u32, cols: u32, out_dir: &Path) -> CommandRes
             .with_elapsed_ms(start.elapsed().as_millis() as u64);
     }
 
-    // Load image
-    let mut img = match image::open(input) {
-        Ok(i) => i,
-        Err(e) => {
-            return CommandResult::err(
-                "tile",
-                input_str,
-                ErrorInfo::with_message(ErrorCode::UnsupportedFormat, e.to_string()),
-            )
-            .with_elapsed_ms(start.elapsed().as_millis() as u64);
+    let source = match source::load_image_source(input) {
+        Ok(source) => source,
+        Err(error) => {
+            return CommandResult::err("tile", input_str, error)
+                .with_elapsed_ms(start.elapsed().as_millis() as u64);
         }
     };
-
-    let file_meta = match std::fs::metadata(input) {
-        Ok(m) => m,
-        Err(e) => {
-            return CommandResult::err(
-                "tile",
-                input_str,
-                ErrorInfo::with_message(ErrorCode::FileNotFound, e.to_string()),
-            )
-            .with_elapsed_ms(start.elapsed().as_millis() as u64);
-        }
-    };
+    let mut img = source.image;
 
     let (src_w, src_h) = (img.width(), img.height());
-
-    // Guard: pixel limit
-    if let Err(e) = guard::validate_dimensions(src_w, src_h) {
-        return CommandResult::err("tile", input_str, e)
-            .with_elapsed_ms(start.elapsed().as_millis() as u64);
-    }
 
     // Guard: tile grid must not exceed source dimensions
     if let Err(e) = guard::validate_tile_fits(rows, cols, src_w, src_h) {
@@ -133,12 +114,7 @@ pub fn execute(input: &Path, rows: u32, cols: u32, out_dir: &Path) -> CommandRes
     }
 
     let data = TileOutput {
-        source: SourceInfo {
-            width: src_w,
-            height: src_h,
-            format: crate::inspect::infer_format(input),
-            size_bytes: file_meta.len(),
-        },
+        source: source.info,
         rows,
         cols,
         tiles,

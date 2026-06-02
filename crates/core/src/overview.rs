@@ -4,8 +4,11 @@
 use std::path::Path;
 use std::time::Instant;
 
-use crate::coord;
-use crate::types::*;
+use crate::error::{ErrorCode, ErrorInfo};
+use crate::geom::{Rect, Size};
+use crate::protocol::{CommandResult, OverviewOutput};
+use crate::region;
+use crate::source;
 
 /// Execute the overview command.
 pub fn execute(input: &Path, output: &Path, max_side: u32) -> CommandResult<OverviewOutput> {
@@ -35,38 +38,16 @@ pub fn execute(input: &Path, output: &Path, max_side: u32) -> CommandResult<Over
         .with_elapsed_ms(start.elapsed().as_millis() as u64);
     }
 
-    // Load image
-    let img = match image::open(input) {
-        Ok(i) => i,
-        Err(e) => {
-            return CommandResult::err(
-                "overview",
-                input_str,
-                ErrorInfo::with_message(ErrorCode::UnsupportedFormat, e.to_string()),
-            )
-            .with_elapsed_ms(start.elapsed().as_millis() as u64);
+    let source = match source::load_image_source(input) {
+        Ok(source) => source,
+        Err(error) => {
+            return CommandResult::err("overview", input_str, error)
+                .with_elapsed_ms(start.elapsed().as_millis() as u64);
         }
     };
-
-    let file_meta = match std::fs::metadata(input) {
-        Ok(m) => m,
-        Err(e) => {
-            return CommandResult::err(
-                "overview",
-                input_str,
-                ErrorInfo::with_message(ErrorCode::FileNotFound, e.to_string()),
-            )
-            .with_elapsed_ms(start.elapsed().as_millis() as u64);
-        }
-    };
+    let img = source.image;
 
     let (src_w, src_h) = (img.width(), img.height());
-
-    // Guard: pixel limit
-    if let Err(e) = crate::guard::validate_dimensions(src_w, src_h) {
-        return CommandResult::err("overview", input_str, e)
-            .with_elapsed_ms(start.elapsed().as_millis() as u64);
-    }
 
     let long_side = src_w.max(src_h);
 
@@ -106,12 +87,8 @@ pub fn execute(input: &Path, output: &Path, max_side: u32) -> CommandResult<Over
         width: src_w,
         height: src_h,
     };
-    let mapping = coord::make_mapping(
+    let mapping = region::coordinate_mapping(
         source_rect,
-        Size {
-            width: src_w,
-            height: src_h,
-        },
         Size {
             width: out_w,
             height: out_h,
@@ -120,12 +97,7 @@ pub fn execute(input: &Path, output: &Path, max_side: u32) -> CommandResult<Over
 
     let data = OverviewOutput {
         output: output.display().to_string(),
-        source: SourceInfo {
-            width: src_w,
-            height: src_h,
-            format: crate::inspect::infer_format(input),
-            size_bytes: file_meta.len(),
-        },
+        source: source.info,
         result: Size {
             width: out_w,
             height: out_h,

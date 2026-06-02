@@ -1,7 +1,7 @@
 //! Shared utility functions.
 use std::path::Path;
 
-use crate::types::DEFAULT_JPEG_QUALITY;
+use crate::constants::DEFAULT_JPEG_QUALITY;
 
 /// Save an image to the specified path, inferring format from extension.
 ///

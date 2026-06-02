@@ -349,3 +349,89 @@ fn sample_missing_mode_returns_invalid_parameters() {
         .code(1)
         .stdout(predicates::str::contains("INVALID_PARAMETERS"));
 }
+
+// ---------------------------------------------------------------------------
+// photography metrics
+// ---------------------------------------------------------------------------
+
+#[test]
+fn sharpness_success() {
+    bin()
+        .arg("sharpness")
+        .arg(fixture("64x64.png"))
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("\"operation\": \"sharpness\""))
+        .stdout(predicates::str::contains("\"score\""));
+}
+
+#[test]
+fn histogram_success() {
+    bin()
+        .arg("histogram")
+        .arg(fixture("64x64.png"))
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("\"operation\": \"histogram\""))
+        .stdout(predicates::str::contains("\"mean_luma\""));
+}
+
+#[test]
+fn highlight_clipping_success() {
+    bin()
+        .arg("highlight-clipping")
+        .arg(fixture("64x64.png"))
+        .assert()
+        .success()
+        .stdout(predicates::str::contains(
+            "\"operation\": \"highlight-clipping\"",
+        ))
+        .stdout(predicates::str::contains("\"threshold\": 250"));
+}
+
+#[test]
+fn shadow_clipping_success() {
+    bin()
+        .arg("shadow-clipping")
+        .arg(fixture("64x64.png"))
+        .assert()
+        .success()
+        .stdout(predicates::str::contains(
+            "\"operation\": \"shadow-clipping\"",
+        ))
+        .stdout(predicates::str::contains("\"threshold\": 5"));
+}
+
+#[test]
+fn contrast_success() {
+    bin()
+        .arg("contrast")
+        .arg(fixture("64x64.png"))
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("\"operation\": \"contrast\""))
+        .stdout(predicates::str::contains("\"rms_contrast\""));
+}
+
+#[test]
+fn color_cast_success() {
+    bin()
+        .arg("color-cast")
+        .arg(fixture("64x64.png"))
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("\"operation\": \"color-cast\""))
+        .stdout(predicates::str::contains("\"dominant_channel\""));
+}
+
+#[test]
+fn sharpness_malformed_rect_returns_invalid_parameters() {
+    bin()
+        .arg("sharpness")
+        .arg(fixture("64x64.png"))
+        .arg("--rect")
+        .arg("1,2,3")
+        .assert()
+        .code(1)
+        .stdout(predicates::str::contains("INVALID_PARAMETERS"));
+}

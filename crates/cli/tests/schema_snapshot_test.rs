@@ -4,7 +4,7 @@
 //! paths, elapsed time, file size, or exact image dimensions.
 
 use assert_cmd::Command;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::path::PathBuf;
 
 fn bin() -> Command {
@@ -147,8 +147,12 @@ fn overview_success_schema_snapshot() {
                 },
                 "scale_factor": "number",
                 "coordinate_mapping": {
-                    "crop_origin_in_source": ["number"],
-                    "scale_factor": "number",
+                    "source_origin": {
+                        "x": "number",
+                        "y": "number"
+                    },
+                    "scale_x": "number",
+                    "scale_y": "number",
                     "formula": "string"
                 }
             },
@@ -241,14 +245,16 @@ fn viewport_success_schema_snapshot() {
                     "size_bytes": "number"
                 },
                 "crop": {
-                    "mode": "string",
-                    "region": {
-                        "x": "number",
-                        "y": "number",
-                        "width": "number",
-                        "height": "number"
+                    "spec": {
+                        "mode": "string",
+                        "rect": {
+                            "x": "number",
+                            "y": "number",
+                            "width": "number",
+                            "height": "number"
+                        }
                     },
-                    "params": {
+                    "region": {
                         "x": "number",
                         "y": "number",
                         "width": "number",
@@ -260,8 +266,12 @@ fn viewport_success_schema_snapshot() {
                     "height": "number"
                 },
                 "coordinate_mapping": {
-                    "crop_origin_in_source": ["number"],
-                    "scale_factor": "null",
+                    "source_origin": {
+                        "x": "number",
+                        "y": "number"
+                    },
+                    "scale_x": "number",
+                    "scale_y": "number",
                     "formula": "string"
                 }
             },
@@ -358,6 +368,204 @@ fn sample_rect_success_schema_snapshot() {
                         "transparent_ratio": "number"
                     },
                     "pixel_count": "number"
+                }
+            },
+            "warnings": [],
+            "elapsed_ms": "number"
+        })
+    );
+}
+
+#[test]
+fn sharpness_success_schema_snapshot() {
+    let actual = run_json(&[
+        "sharpness".to_string(),
+        fixture("64x64.png").display().to_string(),
+    ]);
+
+    assert_eq!(
+        shape(&actual),
+        json!({
+            "ok": "bool",
+            "operation": "string",
+            "input": "string",
+            "data": {
+                "source": {
+                    "width": "number",
+                    "height": "number",
+                    "format": "string",
+                    "size_bytes": "number"
+                },
+                "region": {
+                    "x": "number",
+                    "y": "number",
+                    "width": "number",
+                    "height": "number"
+                },
+                "sharpness": {
+                    "score": "number",
+                    "mean_edge_strength": "number",
+                    "max_edge_strength": "number"
+                }
+            },
+            "warnings": [],
+            "elapsed_ms": "number"
+        })
+    );
+}
+
+#[test]
+fn histogram_success_schema_snapshot() {
+    let actual = run_json(&[
+        "histogram".to_string(),
+        fixture("64x64.png").display().to_string(),
+    ]);
+
+    assert_eq!(
+        shape(&actual),
+        json!({
+            "ok": "bool",
+            "operation": "string",
+            "input": "string",
+            "data": {
+                "source": {
+                    "width": "number",
+                    "height": "number",
+                    "format": "string",
+                    "size_bytes": "number"
+                },
+                "region": {
+                    "x": "number",
+                    "y": "number",
+                    "width": "number",
+                    "height": "number"
+                },
+                "histogram": {
+                    "bins": ["number"],
+                    "pixel_count": "number",
+                    "mean_luma": "number",
+                    "median_luma": "number",
+                    "p05_luma": "number",
+                    "p95_luma": "number"
+                }
+            },
+            "warnings": [],
+            "elapsed_ms": "number"
+        })
+    );
+}
+
+#[test]
+fn highlight_clipping_success_schema_snapshot() {
+    let actual = run_json(&[
+        "highlight-clipping".to_string(),
+        fixture("64x64.png").display().to_string(),
+    ]);
+
+    assert_eq!(
+        shape(&actual),
+        json!({
+            "ok": "bool",
+            "operation": "string",
+            "input": "string",
+            "data": {
+                "source": {
+                    "width": "number",
+                    "height": "number",
+                    "format": "string",
+                    "size_bytes": "number"
+                },
+                "region": {
+                    "x": "number",
+                    "y": "number",
+                    "width": "number",
+                    "height": "number"
+                },
+                "clipping": {
+                    "threshold": "number",
+                    "clipped_pixels": "number",
+                    "clipped_ratio": "number",
+                    "pixel_count": "number"
+                }
+            },
+            "warnings": [],
+            "elapsed_ms": "number"
+        })
+    );
+}
+
+#[test]
+fn contrast_success_schema_snapshot() {
+    let actual = run_json(&[
+        "contrast".to_string(),
+        fixture("64x64.png").display().to_string(),
+    ]);
+
+    assert_eq!(
+        shape(&actual),
+        json!({
+            "ok": "bool",
+            "operation": "string",
+            "input": "string",
+            "data": {
+                "source": {
+                    "width": "number",
+                    "height": "number",
+                    "format": "string",
+                    "size_bytes": "number"
+                },
+                "region": {
+                    "x": "number",
+                    "y": "number",
+                    "width": "number",
+                    "height": "number"
+                },
+                "contrast": {
+                    "rms_contrast": "number",
+                    "luma_stddev": "number",
+                    "min_luma": "number",
+                    "max_luma": "number",
+                    "dynamic_range": "number"
+                }
+            },
+            "warnings": [],
+            "elapsed_ms": "number"
+        })
+    );
+}
+
+#[test]
+fn color_cast_success_schema_snapshot() {
+    let actual = run_json(&[
+        "color-cast".to_string(),
+        fixture("64x64.png").display().to_string(),
+    ]);
+
+    assert_eq!(
+        shape(&actual),
+        json!({
+            "ok": "bool",
+            "operation": "string",
+            "input": "string",
+            "data": {
+                "source": {
+                    "width": "number",
+                    "height": "number",
+                    "format": "string",
+                    "size_bytes": "number"
+                },
+                "region": {
+                    "x": "number",
+                    "y": "number",
+                    "width": "number",
+                    "height": "number"
+                },
+                "color_cast": {
+                    "channel_means": ["number"],
+                    "neutral_mean": "number",
+                    "cast_vector": ["number"],
+                    "cast_strength": "number",
+                    "dominant_channel": "string"
                 }
             },
             "warnings": [],

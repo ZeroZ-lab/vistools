@@ -1,36 +1,35 @@
-//! Coordinate calculation and mapping.
+//! Coordinate calculation and mapping primitives.
 //!
 //! Decisions: PD2 (unified coordinate system), FD2 (coordinate mapping per operation).
-use crate::types::{Anchor, CoordinateMapping, Percent, Rect, Size};
+use crate::geom::{Anchor, Percent, Point, Rect, Size};
+use crate::protocol::CoordinateMapping;
 
 /// Convert a nine-position anchor to a pixel crop rectangle.
 ///
 /// The anchor selects which region of the source image to extract.
 /// `viewport_w` and `viewport_h` define the crop size.
-pub fn anchor_to_rect(anchor: Anchor, viewport_w: u32, viewport_h: u32, source: Size) -> Rect {
+pub fn anchor_to_rect(anchor: Anchor, requested: Size, source: Size) -> Rect {
+    let width = requested.width.min(source.width);
+    let height = requested.height.min(source.height);
     let x = match anchor {
         Anchor::TopLeft | Anchor::Left | Anchor::BottomLeft => 0,
-        Anchor::Top | Anchor::Center | Anchor::Bottom => {
-            source.width.saturating_sub(viewport_w) / 2
-        }
+        Anchor::Top | Anchor::Center | Anchor::Bottom => source.width.saturating_sub(width) / 2,
         Anchor::TopRight | Anchor::Right | Anchor::BottomRight => {
-            source.width.saturating_sub(viewport_w)
+            source.width.saturating_sub(width)
         }
     };
     let y = match anchor {
         Anchor::TopLeft | Anchor::Top | Anchor::TopRight => 0,
-        Anchor::Left | Anchor::Center | Anchor::Right => {
-            source.height.saturating_sub(viewport_h) / 2
-        }
+        Anchor::Left | Anchor::Center | Anchor::Right => source.height.saturating_sub(height) / 2,
         Anchor::BottomLeft | Anchor::Bottom | Anchor::BottomRight => {
-            source.height.saturating_sub(viewport_h)
+            source.height.saturating_sub(height)
         }
     };
     Rect {
         x,
         y,
-        width: viewport_w,
-        height: viewport_h,
+        width,
+        height,
     }
 }
 
@@ -59,7 +58,7 @@ pub fn percent_to_rect(pct: Percent, source: Size) -> Rect {
 ///
 /// Used by viewport and overview to describe how
 /// output coordinates relate back to the source image.
-pub fn make_mapping(source_rect: Rect, _source_size: Size, result_size: Size) -> CoordinateMapping {
+pub fn make_mapping(source_rect: Rect, result_size: Size) -> CoordinateMapping {
     let scale_x = if source_rect.width > 0 {
         result_size.width as f64 / source_rect.width as f64
     } else {
@@ -70,16 +69,13 @@ pub fn make_mapping(source_rect: Rect, _source_size: Size, result_size: Size) ->
     } else {
         1.0
     };
-    // Overview uses uniform scaling; viewport uses no scaling.
-    let scale = (scale_x + scale_y) / 2.0;
-
-    let has_scale = (scale - 1.0).abs() > f64::EPSILON;
+    let has_scale = (scale_x - 1.0).abs() > f64::EPSILON || (scale_y - 1.0).abs() > f64::EPSILON;
     let formula = if has_scale && source_rect.x == 0 && source_rect.y == 0 {
-        format!("source_x = result_x / {scale:.6}, source_y = result_y / {scale:.6}")
+        format!("source_x = result_x / {scale_x:.6}, source_y = result_y / {scale_y:.6}")
     } else if has_scale {
         format!(
             "source_x = result_x / {:.6} + {}, source_y = result_y / {:.6} + {}",
-            scale, source_rect.x, scale, source_rect.y
+            scale_x, source_rect.x, scale_y, source_rect.y
         )
     } else if source_rect.x == 0 && source_rect.y == 0 {
         "source_x = result_x, source_y = result_y".to_string()
@@ -91,8 +87,12 @@ pub fn make_mapping(source_rect: Rect, _source_size: Size, result_size: Size) ->
     };
 
     CoordinateMapping {
-        crop_origin_in_source: [source_rect.x, source_rect.y],
-        scale_factor: if has_scale { Some(scale) } else { None },
+        source_origin: Point {
+            x: source_rect.x,
+            y: source_rect.y,
+        },
+        scale_x,
+        scale_y,
         formula,
     }
 }
@@ -106,8 +106,10 @@ mod tests {
         // Contract verification: anchor right, w=2000, h=4000 → x=4000, y=0
         let rect = anchor_to_rect(
             Anchor::Right,
-            2000,
-            4000,
+            Size {
+                width: 2000,
+                height: 4000,
+            },
             Size {
                 width: 6000,
                 height: 4000,
@@ -123,8 +125,10 @@ mod tests {
     fn anchor_center_on_1000x1000() {
         let rect = anchor_to_rect(
             Anchor::Center,
-            500,
-            500,
+            Size {
+                width: 500,
+                height: 500,
+            },
             Size {
                 width: 1000,
                 height: 1000,
@@ -138,8 +142,10 @@ mod tests {
     fn anchor_bottom_left() {
         let rect = anchor_to_rect(
             Anchor::BottomLeft,
-            200,
-            300,
+            Size {
+                width: 200,
+                height: 300,
+            },
             Size {
                 width: 1000,
                 height: 800,
@@ -200,16 +206,14 @@ mod tests {
                 height: 500,
             },
             Size {
-                width: 1000,
-                height: 1000,
-            },
-            Size {
                 width: 500,
                 height: 500,
             },
         );
-        assert_eq!(mapping.crop_origin_in_source, [100, 200]);
-        assert!(mapping.scale_factor.is_none());
+        assert_eq!(mapping.source_origin.x, 100);
+        assert_eq!(mapping.source_origin.y, 200);
+        assert_eq!(mapping.scale_x, 1.0);
+        assert_eq!(mapping.scale_y, 1.0);
         assert!(mapping.formula.contains("100"));
     }
 
@@ -223,17 +227,13 @@ mod tests {
                 height: 4000,
             },
             Size {
-                width: 6000,
-                height: 4000,
-            },
-            Size {
                 width: 1200,
                 height: 800,
             },
         );
-        assert_eq!(mapping.crop_origin_in_source, [0, 0]);
-        assert!(mapping.scale_factor.is_some());
-        let sf = mapping.scale_factor.unwrap();
-        assert!((sf - 0.2).abs() < 0.01);
+        assert_eq!(mapping.source_origin.x, 0);
+        assert_eq!(mapping.source_origin.y, 0);
+        assert!((mapping.scale_x - 0.2).abs() < 0.01);
+        assert!((mapping.scale_y - 0.2).abs() < 0.01);
     }
 }

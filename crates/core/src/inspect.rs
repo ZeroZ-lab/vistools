@@ -5,7 +5,10 @@ use std::fs;
 use std::path::Path;
 use std::time::Instant;
 
-use crate::types::*;
+use crate::constants::OVERVIEW_THRESHOLD;
+use crate::error::{ErrorCode, ErrorInfo};
+use crate::protocol::{CommandResult, InspectOutput, SourceInfo, Suggestion};
+use crate::source::infer_format;
 
 /// Execute the inspect command.
 pub fn execute(input: &Path) -> CommandResult<InspectOutput> {
@@ -49,7 +52,6 @@ pub fn execute(input: &Path) -> CommandResult<InspectOutput> {
             .with_elapsed_ms(start.elapsed().as_millis() as u64);
     }
 
-    // Infer format from extension
     let format = infer_format(input);
 
     // FD7: strategy suggestion based on 1568px threshold
@@ -100,26 +102,10 @@ pub fn execute(input: &Path) -> CommandResult<InspectOutput> {
         .with_elapsed_ms(start.elapsed().as_millis() as u64)
 }
 
-/// Infer image format from file extension.
-pub fn infer_format(path: &Path) -> String {
-    match path
-        .extension()
-        .and_then(|e| e.to_str())
-        .map(|e| e.to_lowercase())
-    {
-        Some(e) if e == "png" => "png".to_string(),
-        Some(e) if e == "jpg" || e == "jpeg" => "jpeg".to_string(),
-        Some(e) if e == "webp" => "webp".to_string(),
-        Some(e) if e == "tiff" || e == "tif" => "tiff".to_string(),
-        Some(e) if e == "bmp" => "bmp".to_string(),
-        Some(e) if e == "gif" => "gif".to_string(),
-        _ => "unknown".to_string(),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::source::infer_format;
     use crate::test_support::fixture;
 
     #[test]

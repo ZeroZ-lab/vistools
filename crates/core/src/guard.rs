@@ -4,7 +4,8 @@
 //! Decisions: PD3 (Agent-safe), FD4 (centralized guard).
 use std::path::Path;
 
-use crate::types::{ErrorCode, ErrorInfo};
+use crate::constants::{MAX_PIXELS, MAX_TILE_COUNT};
+use crate::error::{ErrorCode, ErrorInfo};
 
 /// Rejects paths containing `..` components and checks the file exists.
 /// PD3: path sandbox — no directory traversal.
@@ -72,7 +73,7 @@ pub fn validate_different_paths(input: &Path, output: &Path) -> Result<(), Error
 /// PD3: pixel limit.
 pub fn validate_dimensions(width: u32, height: u32) -> Result<(), ErrorInfo> {
     let pixels = (width as u64) * (height as u64);
-    if pixels > crate::types::MAX_PIXELS {
+    if pixels > MAX_PIXELS {
         return Err(ErrorInfo::with_message(
             ErrorCode::PixelLimitExceeded,
             format!(
@@ -80,7 +81,7 @@ pub fn validate_dimensions(width: u32, height: u32) -> Result<(), ErrorInfo> {
                 width,
                 height,
                 pixels / 1_000_000,
-                crate::types::MAX_PIXELS / 1_000_000,
+                MAX_PIXELS / 1_000_000,
             ),
         ));
     }
@@ -91,16 +92,10 @@ pub fn validate_dimensions(width: u32, height: u32) -> Result<(), ErrorInfo> {
 /// PD3: tile count limit.
 pub fn validate_tile_count(rows: u32, cols: u32) -> Result<(), ErrorInfo> {
     let count = (rows as u64) * (cols as u64);
-    if count > crate::types::MAX_TILE_COUNT as u64 {
+    if count > MAX_TILE_COUNT as u64 {
         return Err(ErrorInfo::with_message(
             ErrorCode::InvalidParameters,
-            format!(
-                "tile grid {}x{} = {} tiles, exceeds {} limit",
-                rows,
-                cols,
-                count,
-                crate::types::MAX_TILE_COUNT,
-            ),
+            format!("tile grid {rows}x{cols} = {count} tiles, exceeds {MAX_TILE_COUNT} limit"),
         ));
     }
     if rows == 0 || cols == 0 {

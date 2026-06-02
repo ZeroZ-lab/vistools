@@ -4,8 +4,11 @@
 use std::path::Path;
 use std::time::Instant;
 
-use crate::guard;
-use crate::types::*;
+use crate::error::{ErrorCode, ErrorInfo};
+use crate::geom::{Point, Rect, Size};
+use crate::protocol::{AlphaStats, ColorInfo, CommandResult, SampleOutput, SampleResult};
+use crate::region;
+use crate::source;
 
 /// Color sampling mode.
 #[derive(Debug, Clone, Copy)]
@@ -19,44 +22,18 @@ pub fn execute(input: &Path, mode: SampleMode) -> CommandResult<SampleOutput> {
     let start = Instant::now();
     let input_str = input.display().to_string();
 
-    if let Err(e) = guard::validate_input_path(input) {
-        return CommandResult::err("sample", input_str, e)
-            .with_elapsed_ms(start.elapsed().as_millis() as u64);
-    }
-
-    let img = match image::open(input) {
-        Ok(i) => i.to_rgba8(),
-        Err(e) => {
-            return CommandResult::err(
-                "sample",
-                input_str,
-                ErrorInfo::with_message(ErrorCode::UnsupportedFormat, e.to_string()),
-            )
-            .with_elapsed_ms(start.elapsed().as_millis() as u64);
+    let source = match source::load_rgba_source(input) {
+        Ok(source) => source,
+        Err(error) => {
+            return CommandResult::err("sample", input_str, error)
+                .with_elapsed_ms(start.elapsed().as_millis() as u64);
         }
     };
-
-    let file_meta = match std::fs::metadata(input) {
-        Ok(m) => m,
-        Err(e) => {
-            return CommandResult::err(
-                "sample",
-                input_str,
-                ErrorInfo::with_message(ErrorCode::FileNotFound, e.to_string()),
-            )
-            .with_elapsed_ms(start.elapsed().as_millis() as u64);
-        }
-    };
-
+    let img = source.image;
     let src_size = Size {
-        width: img.width(),
-        height: img.height(),
+        width: source.info.width,
+        height: source.info.height,
     };
-
-    if let Err(e) = guard::validate_dimensions(src_size.width, src_size.height) {
-        return CommandResult::err("sample", input_str, e)
-            .with_elapsed_ms(start.elapsed().as_millis() as u64);
-    }
 
     let sample = match mode {
         SampleMode::Point { x, y } => {
@@ -93,24 +70,9 @@ pub fn execute(input: &Path, mode: SampleMode) -> CommandResult<SampleOutput> {
                 )
                 .with_elapsed_ms(start.elapsed().as_millis() as u64);
             }
-            if !rect_fits_source(rect, src_size) {
-                return CommandResult::err(
-                    "sample",
-                    input_str,
-                    ErrorInfo::with_message(
-                        ErrorCode::InvalidCoordinates,
-                        format!(
-                            "rect ({},{},{},{}) exceeds source ({}x{})",
-                            rect.x,
-                            rect.y,
-                            rect.width,
-                            rect.height,
-                            src_size.width,
-                            src_size.height
-                        ),
-                    ),
-                )
-                .with_elapsed_ms(start.elapsed().as_millis() as u64);
+            if let Err(error) = region::validate_rect(rect, src_size, "rect") {
+                return CommandResult::err("sample", input_str, error)
+                    .with_elapsed_ms(start.elapsed().as_millis() as u64);
             }
 
             let (average, alpha_stats) = sample_rect(&img, rect);
@@ -124,26 +86,11 @@ pub fn execute(input: &Path, mode: SampleMode) -> CommandResult<SampleOutput> {
     };
 
     let data = SampleOutput {
-        source: SourceInfo {
-            width: src_size.width,
-            height: src_size.height,
-            format: crate::inspect::infer_format(input),
-            size_bytes: file_meta.len(),
-        },
+        source: source.info,
         sample,
     };
 
     CommandResult::ok("sample", input_str, data).with_elapsed_ms(start.elapsed().as_millis() as u64)
-}
-
-fn rect_fits_source(rect: Rect, src_size: Size) -> bool {
-    let Some(right) = rect.x.checked_add(rect.width) else {
-        return false;
-    };
-    let Some(bottom) = rect.y.checked_add(rect.height) else {
-        return false;
-    };
-    right <= src_size.width && bottom <= src_size.height
 }
 
 fn sample_rect(img: &image::RgbaImage, rect: Rect) -> (ColorInfo, AlphaStats) {
