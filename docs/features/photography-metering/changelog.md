@@ -116,3 +116,38 @@
   - CLI 集成测试新增 2 个
   - schema snapshot 新增 1 个
   - 全量验证：141 tests passed / clippy 0 warnings / fmt clean
+
+### v0.3.2 — 2026-06-02 — P1 white-balance 详设
+
+- **触发**：用户调用 `forge:detail`，为下一个 P1 功能做详设
+- **范围**：在既有摄影计量 feature 内补齐 P1 合约，不新增 feature 目录
+- **PRD 更新**：
+  - 新增 US-04: focus-map（AC-04-1~4），补齐已实现命令的需求追溯
+  - 新增 US-05: white-balance（AC-05-1~5），定义灰世界白平衡估计验收条件
+- **Contract 更新**：
+  - FD7: focus-map 复用 tile remainder 网格策略
+  - FD8: focus-map 复用 sharpness kernel
+  - FD9: white-balance 使用灰世界通道增益估计
+  - FD10: white-balance 不输出 Kelvin，避免虚假色温精度
+- **下一步**：进入 `white-balance` 构建，新增协议类型、`execute_white_balance`、CLI 注册、core/CLI/schema 测试
+
+### v0.3.3 — 2026-06-02 — P1 white-balance 构建完成
+
+- **触发**：用户调用 `forge:codegen`，要求从详设投影代码
+- **版本**：vistools `0.2.4` → `0.2.5`
+- **产出**：
+  - `vistools white-balance <INPUT> [--rect x,y,width,height]`
+  - `WhiteBalanceOutput` / `WhiteBalanceMetrics` / `RgbMeans` / `RgbGains`
+  - `execute_white_balance` 灰世界白平衡估计
+  - CLI `white-balance` 子命令注册
+- **能力**：
+  - 输出 RGB 均值和灰世界 R/G/B gains
+  - 输出 `temperature_bias`: `warm` / `neutral` / `cool`
+  - 输出 `tint_bias`: `green` / `neutral` / `magenta`
+  - 输出 `assessment`: `neutral` / `biased`
+  - 不输出 Kelvin，不生成修正图片
+- **测试**：
+  - core 单测新增 5 个，覆盖 AC-05-1~5
+  - CLI 集成测试新增 2 个
+  - schema snapshot 新增 1 个
+- **验证**：149 tests passed / clippy 0 warnings / fmt clean

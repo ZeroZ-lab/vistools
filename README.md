@@ -145,12 +145,14 @@ vistools histogram src.jpg --rgb
 vistools zone-map src.jpg
 vistools exposure src.jpg --mode evaluative
 vistools focus-map src.jpg --rows 3 --cols 4
+vistools white-balance src.jpg
 ```
 
 - `histogram --rgb` adds per-channel R/G/B histograms without changing the default luminance-only output.
 - `zone-map` maps luminance into Zone System `0..X`, with per-zone ratios and representative source coordinates.
 - `exposure` estimates `ev`, supports `evaluative`, `spot`, `center-weighted`, and `highlight-weighted`, and classifies the result as `under` / `correct` / `over`.
 - `focus-map` splits the image or `--rect` region into an `N x M` grid and returns per-cell sharpness, the `best_cell`, and a `focus_point` you can drill into with `viewport`.
+- `white-balance` estimates gray-world R/G/B gains and reports `warm` / `cool` and `green` / `magenta` bias without outputting a corrected image.
 
 ### Help & version
 

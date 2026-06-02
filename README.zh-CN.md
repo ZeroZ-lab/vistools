@@ -155,12 +155,14 @@ vistools histogram src.jpg --rgb
 vistools zone-map src.jpg
 vistools exposure src.jpg --mode evaluative
 vistools focus-map src.jpg --rows 3 --cols 4
+vistools white-balance src.jpg
 ```
 
 - `histogram --rgb` 在默认亮度直方图之外增量输出 R/G/B 三通道，不破坏原有输出形状。
 - `zone-map` 把亮度映射到 Zone System `0..X`，返回每区占比和代表性源图坐标。
 - `exposure` 估算 `ev`，支持 `evaluative`、`spot`、`center-weighted`、`highlight-weighted` 四种测光模式，并输出 `under` / `correct` / `over` 判断。
 - `focus-map` 把整图或 `--rect` 区域切成 `N x M` 网格，返回每格锐度、`best_cell` 和可继续用 `viewport` 深挖的 `focus_point`。
+- `white-balance` 估算灰世界 R/G/B 通道增益，并返回 `warm` / `cool` 与 `green` / `magenta` 偏色方向，不输出修正图片。
 
 ### 帮助与版本
 

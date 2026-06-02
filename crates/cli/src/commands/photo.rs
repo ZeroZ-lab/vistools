@@ -173,6 +173,12 @@ pub fn run_focus_map(args: FocusMapArgs) -> (String, bool) {
     (serde_json::to_string_pretty(&result).unwrap(), ok)
 }
 
+pub fn run_white_balance(args: RegionArgs) -> (String, bool) {
+    run_region_metric("white-balance", &args.input, args.rect, |input, rect| {
+        vistools_core::photo::execute_white_balance(input, rect)
+    })
+}
+
 fn parse_metering_mode(s: &str) -> Result<MeteringMode, String> {
     match s {
         "evaluative" => Ok(MeteringMode::Evaluative),

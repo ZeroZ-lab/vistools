@@ -11,8 +11,8 @@ use crate::guard;
 use crate::protocol::{
     ChannelHistogram, ClippingMetrics, ClippingOutput, ColorCastMetrics, ColorCastOutput,
     CommandResult, ContrastMetrics, ContrastOutput, ExposureOutput, FocusCell, FocusMapOutput,
-    HistogramMetrics, HistogramOutput, RgbHistogram, SharpnessMetrics, SharpnessOutput, SourceInfo,
-    ZoneInfo, ZoneMapOutput,
+    HistogramMetrics, HistogramOutput, RgbGains, RgbHistogram, RgbMeans, SharpnessMetrics,
+    SharpnessOutput, SourceInfo, WhiteBalanceMetrics, WhiteBalanceOutput, ZoneInfo, ZoneMapOutput,
 };
 use crate::region;
 use crate::source;
@@ -336,6 +336,34 @@ pub fn execute_color_cast(input: &Path, rect: Option<Rect>) -> CommandResult<Col
     };
 
     CommandResult::ok("color-cast", input_str, data)
+        .with_elapsed_ms(start.elapsed().as_millis() as u64)
+}
+
+pub fn execute_white_balance(
+    input: &Path,
+    rect: Option<Rect>,
+) -> CommandResult<WhiteBalanceOutput> {
+    let start = Instant::now();
+    let input_str = input.display().to_string();
+
+    let (img, source, region) = match load_region(input, rect) {
+        Ok(loaded) => loaded,
+        Err(error) => {
+            return CommandResult::err("white-balance", input_str, error)
+                .with_elapsed_ms(start.elapsed().as_millis() as u64);
+        }
+    };
+
+    let rgb_mean = measure_rgb_mean(&img, region);
+    let white_balance = build_white_balance_metrics(rgb_mean);
+
+    let data = WhiteBalanceOutput {
+        source,
+        region,
+        white_balance,
+    };
+
+    CommandResult::ok("white-balance", input_str, data)
         .with_elapsed_ms(start.elapsed().as_millis() as u64)
 }
 
@@ -666,6 +694,82 @@ fn measure_sharpness(img: &image::RgbaImage, region: Rect) -> SharpnessMetrics {
     }
 }
 
+fn measure_rgb_mean(img: &image::RgbaImage, region: Rect) -> RgbMeans {
+    let mut sums = [0u64; 3];
+    iterate_region(region, |x, y| {
+        let [r, g, b, _] = img.get_pixel(x, y).0;
+        sums[0] += r as u64;
+        sums[1] += g as u64;
+        sums[2] += b as u64;
+    });
+
+    let pixel_count = region.area() as f64;
+    if pixel_count == 0.0 {
+        return RgbMeans {
+            r: 0.0,
+            g: 0.0,
+            b: 0.0,
+        };
+    }
+
+    RgbMeans {
+        r: sums[0] as f64 / pixel_count,
+        g: sums[1] as f64 / pixel_count,
+        b: sums[2] as f64 / pixel_count,
+    }
+}
+
+fn build_white_balance_metrics(rgb_mean: RgbMeans) -> WhiteBalanceMetrics {
+    let neutral_mean = (rgb_mean.r + rgb_mean.g + rgb_mean.b) / 3.0;
+    // FD9: gray-world gains describe channel correction direction without writing an image.
+    let gray_world_gains = RgbGains {
+        r: gray_world_gain(neutral_mean, rgb_mean.r),
+        g: gray_world_gain(neutral_mean, rgb_mean.g),
+        b: gray_world_gain(neutral_mean, rgb_mean.b),
+    };
+
+    let threshold = neutral_mean * 0.05;
+    // FD10: report directional bias only; no Kelvin estimate from RGB pixels.
+    let temperature_bias = if rgb_mean.r - rgb_mean.b > threshold {
+        "warm"
+    } else if rgb_mean.b - rgb_mean.r > threshold {
+        "cool"
+    } else {
+        "neutral"
+    };
+
+    let rb_mean = (rgb_mean.r + rgb_mean.b) / 2.0;
+    let tint_bias = if rgb_mean.g - rb_mean > threshold {
+        "green"
+    } else if rb_mean - rgb_mean.g > threshold {
+        "magenta"
+    } else {
+        "neutral"
+    };
+
+    let assessment = if temperature_bias == "neutral" && tint_bias == "neutral" {
+        "neutral"
+    } else {
+        "biased"
+    };
+
+    WhiteBalanceMetrics {
+        rgb_mean,
+        gray_world_gains,
+        temperature_bias: temperature_bias.to_string(),
+        tint_bias: tint_bias.to_string(),
+        assessment: assessment.to_string(),
+    }
+}
+
+fn gray_world_gain(neutral_mean: f64, channel_mean: f64) -> f64 {
+    if channel_mean == 0.0 {
+        1.0
+    } else {
+        neutral_mean / channel_mean
+    }
+}
+
 fn iterate_region(region: Rect, mut visit: impl FnMut(u32, u32)) {
     for y in region.y..region.bottom() {
         for x in region.x..region.right() {
@@ -860,6 +964,89 @@ mod tests {
         let color_cast = result.data.unwrap().color_cast;
         assert_eq!(color_cast.dominant_channel, "red");
         assert!(color_cast.cast_strength > 0.0);
+    }
+
+    #[test]
+    fn white_balance_reports_neutral_gray() {
+        // Test for: AC-05-1
+        let img = ImageBuffer::from_pixel(4, 4, Rgba([128, 128, 128, 255]));
+        let result = execute_white_balance(write_temp_image(img).as_ref(), None);
+        assert!(result.ok);
+        let white_balance = result.data.unwrap().white_balance;
+        assert_eq!(white_balance.assessment, "neutral");
+        assert_eq!(white_balance.temperature_bias, "neutral");
+        assert_eq!(white_balance.tint_bias, "neutral");
+        assert!((white_balance.gray_world_gains.r - 1.0).abs() < f64::EPSILON);
+        assert!((white_balance.gray_world_gains.g - 1.0).abs() < f64::EPSILON);
+        assert!((white_balance.gray_world_gains.b - 1.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn white_balance_reports_warm_bias() {
+        // Test for: AC-05-2
+        let img = ImageBuffer::from_pixel(4, 4, Rgba([210, 140, 80, 255]));
+        let result = execute_white_balance(write_temp_image(img).as_ref(), None);
+        assert!(result.ok);
+        let white_balance = result.data.unwrap().white_balance;
+        assert_eq!(white_balance.temperature_bias, "warm");
+        assert_eq!(white_balance.assessment, "biased");
+        assert!(white_balance.gray_world_gains.r < 1.0);
+        assert!(white_balance.gray_world_gains.b > 1.0);
+    }
+
+    #[test]
+    fn white_balance_reports_cool_bias() {
+        // Test for: AC-05-3
+        let img = ImageBuffer::from_pixel(4, 4, Rgba([80, 140, 210, 255]));
+        let result = execute_white_balance(write_temp_image(img).as_ref(), None);
+        assert!(result.ok);
+        let white_balance = result.data.unwrap().white_balance;
+        assert_eq!(white_balance.temperature_bias, "cool");
+        assert_eq!(white_balance.assessment, "biased");
+        assert!(white_balance.gray_world_gains.b < 1.0);
+        assert!(white_balance.gray_world_gains.r > 1.0);
+    }
+
+    #[test]
+    fn white_balance_reports_green_and_magenta_tint() {
+        // Test for: AC-05-4
+        let green = ImageBuffer::from_pixel(4, 4, Rgba([120, 180, 120, 255]));
+        let magenta = ImageBuffer::from_pixel(4, 4, Rgba([180, 120, 180, 255]));
+
+        let green_result = execute_white_balance(write_temp_image(green).as_ref(), None);
+        let magenta_result = execute_white_balance(write_temp_image(magenta).as_ref(), None);
+
+        assert_eq!(green_result.data.unwrap().white_balance.tint_bias, "green");
+        assert_eq!(
+            magenta_result.data.unwrap().white_balance.tint_bias,
+            "magenta"
+        );
+    }
+
+    #[test]
+    fn white_balance_uses_rect_region() {
+        // Test for: AC-05-5
+        let img = ImageBuffer::from_fn(4, 2, |x, _| {
+            if x < 2 {
+                Rgba([128, 128, 128, 255])
+            } else {
+                Rgba([220, 120, 80, 255])
+            }
+        });
+        let result = execute_white_balance(
+            write_temp_image(img).as_ref(),
+            Some(Rect {
+                x: 2,
+                y: 0,
+                width: 2,
+                height: 2,
+            }),
+        );
+        assert!(result.ok);
+        let data = result.data.unwrap();
+        assert_eq!(data.region.x, 2);
+        assert_eq!(data.region.width, 2);
+        assert_eq!(data.white_balance.temperature_bias, "warm");
     }
 
     #[test]

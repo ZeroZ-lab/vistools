@@ -126,7 +126,7 @@
 ### P1：焦点 + 色彩扩展
 
 4. **`focus-map` 新增**：NxM 网格锐度矩阵 + 最锐点坐标 + 焦点区域标注
-5. **`white-balance` 新增**：从 RGB 均值估算色温 Kelvin + green-magenta tint
+5. **`white-balance` 新增**：从 RGB 均值估算灰世界 gains + warm/cool + green/magenta bias
 
 ### P2：进阶计量
 
@@ -167,7 +167,7 @@
 | zone-map 实现 | ZeroZ-lab | 5 天 | 0-X 区分布 + 坐标 + 测试 |
 | exposure 实现 | ZeroZ-lab | 5 天 | EV 估算 + 4 种测光模式 + 测试 |
 | focus-map 实现 | ZeroZ-lab | 7 天 | NxM 网格锐度矩阵 + 坐标 + 测试 |
-| white-balance 实现 | ZeroZ-lab | 7 天 | Kelvin + tint 估算 + 测试 |
+| white-balance 实现 | ZeroZ-lab | 7 天 | 灰世界 gains + bias 估算 + 测试 |
 | 真实照片场景验证 | ZeroZ-lab | 10 天 | 50 张照片批量质检闭环 |
 
 **决策标准**：
@@ -211,7 +211,7 @@
 | `zone-map` | 测量层 | P0 | Zone System 0-X 区分布 |
 | `exposure` | 测量层 | P0 | EV 估算 + 测光模式 |
 | `focus-map` | 测量层 | P1 | NxM 网格锐度矩阵 |
-| `white-balance` | 测量层 | P1 | 色温 Kelvin + tint 估算 |
+| `white-balance` | 测量层 | P1 | 灰世界 gains + warm/cool + green/magenta bias |
 | `gamut` | 测量层 | P2 | 色域边界检查 |
 | `noise` | 测量层 | P2 | SNR + 噪声估算 |
 

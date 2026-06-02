@@ -38,6 +38,8 @@ enum Commands {
     Exposure(commands::photo::ExposureArgs),
     #[command(name = "focus-map")]
     FocusMap(commands::photo::FocusMapArgs),
+    #[command(name = "white-balance")]
+    WhiteBalance(commands::photo::RegionArgs),
 }
 
 fn main() {
@@ -57,6 +59,7 @@ fn main() {
         Commands::ZoneMap(args) => commands::photo::run_zone_map(args),
         Commands::Exposure(args) => commands::photo::run_exposure(args),
         Commands::FocusMap(args) => commands::photo::run_focus_map(args),
+        Commands::WhiteBalance(args) => commands::photo::run_white_balance(args),
     };
 
     println!("{json}");

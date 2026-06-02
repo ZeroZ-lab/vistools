@@ -614,3 +614,30 @@ fn focus_map_invalid_grid_returns_invalid_parameters() {
         .code(1)
         .stdout(predicates::str::contains("INVALID_PARAMETERS"));
 }
+
+#[test]
+fn white_balance_success() {
+    bin()
+        .arg("white-balance")
+        .arg(fixture("64x64.png"))
+        .assert()
+        .success()
+        .stdout(predicates::str::contains(
+            "\"operation\": \"white-balance\"",
+        ))
+        .stdout(predicates::str::contains("\"white_balance\""))
+        .stdout(predicates::str::contains("\"gray_world_gains\""))
+        .stdout(predicates::str::contains("\"temperature_bias\""));
+}
+
+#[test]
+fn white_balance_malformed_rect_returns_invalid_parameters() {
+    bin()
+        .arg("white-balance")
+        .arg(fixture("64x64.png"))
+        .arg("--rect")
+        .arg("1,2,3")
+        .assert()
+        .code(1)
+        .stdout(predicates::str::contains("INVALID_PARAMETERS"));
+}

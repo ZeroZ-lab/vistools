@@ -1,6 +1,6 @@
-# PRD — 摄影计量 P0（histogram --rgb / zone-map / exposure）
+# PRD — 摄影计量（P0 + P1）
 
-> Agent 可用摄影语言级计量命令回答"曝光对不对"。
+> Agent 可用摄影语言级计量命令回答"曝光对不对"、"焦点在哪里"、"白平衡是否偏色"。
 
 ## 版本信息
 
@@ -9,7 +9,7 @@
 | 版本 | v1.0 |
 | 日期 | 2026-06-02 |
 | 作者 | ZeroZ-lab |
-| 状态 | 已确认 |
+| 状态 | P0 已确认；P1 追加需求已确认 |
 
 ---
 
@@ -18,7 +18,7 @@
 | 角色 | 描述 | 核心诉求 |
 |------|------|---------|
 | Agent（主用户） | 通过 Bash 调用 CLI 的 AI Agent | 用摄影语言评估照片曝光质量，做批量质检 |
-| 摄影师（受益人） | 照片交付前的质检需求 | 不手动逐张看直方图，由 Agent 自动筛选问题照片 |
+| 摄影师（受益人） | 照片交付前的质检需求 | 不手动逐张看直方图或逐张放大，由 Agent 自动筛选问题照片 |
 
 ---
 
@@ -32,6 +32,9 @@
 - EV 计算公式：`EV = log2(weighted_mean_luma / 118)`，其中 118 是 sRGB 中灰亮度值（Zone V 的中心值）
 - 测光模式仅 4 种：evaluative（全局均值）、spot（单点）、center-weighted（高斯加权）、highlight-weighted（仅计 top 10% 亮度像素）
 - zone-map 的 `representative_rect` 必须映射回源图坐标
+- focus-map 只输出结构化锐度矩阵，不生成热力图图片
+- white-balance 只输出灰世界估计和校正建议，不输出修正图片
+- white-balance 不输出 Kelvin 绝对色温；没有 RAW/光源模型时，Kelvin 会给出虚假精度
 
 ### 错误码
 
@@ -252,6 +255,110 @@ Then:
 
 ---
 
+### US-04: focus-map — 焦点分布图
+
+**作为** Agent，**我想要** 把图片切成网格并获取每格锐度，**以便** 判断主体是否在清晰区域、焦点是否打偏，以及下一步该放大检查哪块。
+
+**优先级**：P1
+
+**验收条件（Given-When-Then）：**
+
+#### AC-04-1: 正常 focus-map 输出
+
+```
+Given 一张 256x256 PNG
+When 运行 vistools focus-map test.png --rows 4 --cols 4
+Then 返回 ok=true，data.cells 包含 16 个 FocusCell
+  每个 FocusCell 包含 row、col、region、sharpness
+  data.best_cell 为 sharpness.score 最高的 cell
+  data.focus_point 位于 best_cell.region 中心
+```
+
+#### AC-04-2: 网格尺寸校验
+
+```
+Given 任意图片
+When 运行 vistools focus-map test.png --rows 0 --cols 4
+Then 返回 ok=false，error.code = "INVALID_PARAMETERS"
+```
+
+#### AC-04-3: 指定 rect 区域
+
+```
+Given 一张 1000x1000 PNG
+When 运行 vistools focus-map test.png --rect 200,100,600,400 --rows 2 --cols 3
+Then 所有 cell.region 都位于该 rect 内
+  data.region = {x:200, y:100, width:600, height:400}
+```
+
+#### AC-04-4: 余数像素处理
+
+```
+Given 一张 65x65 PNG
+When 运行 vistools focus-map test.png --rows 2 --cols 2
+Then 最后一行吸收高度余数，最后一列吸收宽度余数
+  所有 cell.region 合并后完整覆盖 data.region
+```
+
+---
+
+### US-05: white-balance — 白平衡偏色估计
+
+**作为** Agent，**我想要** 获取图片的灰世界白平衡估计，**以便** 判断照片是否偏暖/偏冷或偏绿/偏洋红，并给出可执行的通道增益建议。
+
+**优先级**：P1
+
+**验收条件（Given-When-Then）：**
+
+#### AC-05-1: 中性灰图片
+
+```
+Given 一张 RGB 均值接近相等的中性灰图片
+When 运行 vistools white-balance test.png
+Then 返回 ok=true
+  data.white_balance.assessment = "neutral"
+  data.white_balance.gray_world_gains 接近 [1.0, 1.0, 1.0]
+```
+
+#### AC-05-2: 偏暖图片
+
+```
+Given 一张 R 通道显著高于 B 通道的图片
+When 运行 vistools white-balance test.png
+Then data.white_balance.temperature_bias = "warm"
+  data.white_balance.gray_world_gains.r < 1.0
+  data.white_balance.gray_world_gains.b > 1.0
+```
+
+#### AC-05-3: 偏冷图片
+
+```
+Given 一张 B 通道显著高于 R 通道的图片
+When 运行 vistools white-balance test.png
+Then data.white_balance.temperature_bias = "cool"
+  data.white_balance.gray_world_gains.b < 1.0
+  data.white_balance.gray_world_gains.r > 1.0
+```
+
+#### AC-05-4: 绿/洋红 tint 判断
+
+```
+Given 一张 G 通道显著偏高或偏低的图片
+When 运行 vistools white-balance test.png
+Then data.white_balance.tint_bias 为 "green" 或 "magenta"
+```
+
+#### AC-05-5: 指定 rect 区域
+
+```
+Given 一张 1000x1000 PNG
+When 运行 vistools white-balance test.png --rect 100,100,300,300
+Then 白平衡统计仅覆盖 rect 区域
+  data.region = {x:100, y:100, width:300, height:300}
+```
+
+---
+
 ## 非功能需求
 
 ### 性能
@@ -283,7 +390,9 @@ Then:
 | RGB 色彩空间的 Zone System | 摄影师看的是亮度 Zone，不看通道 Zone | — |
 | EV 绝对值（基于 EXIF 推算场景亮度） | 需要 EXIF 解析 + 场景反推，超出纯像素范畴 | — |
 | 自动曝光建议（"建议 +1.3 EV"） | 需要场景语义（什么是"正确曝光"），纯计量不应带建议 | 可由 Agent 基于数据自行判断 |
-| focus-map / white-balance / gamut / noise | P1/P2，等 P0 跑通再评估 | photography-metering idea-brief P1/P2 |
+| gamut / noise | P2，等 P1 跑通再评估 | photography-metering idea-brief P2 |
+| white-balance 输出 Kelvin 绝对色温 | 没有 RAW/光源模型时容易产生虚假精度 | 后续如引入色彩管理再评估 |
+| white-balance 输出修正图片 | 当前工具定位是只读计量，Agent 可基于 gains 决定是否调用其它工具处理 | — |
 | 多图批量处理 | 编排由 Agent 负责，vistools 只做单图原子命令 | v1 命令面原则 |
 | 自然语言报告 | 由 LLM 基于结构化结果完成 | v1 排除 |
 

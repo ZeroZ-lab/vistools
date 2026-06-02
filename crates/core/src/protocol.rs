@@ -344,6 +344,36 @@ pub struct ColorCastMetrics {
     pub dominant_channel: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WhiteBalanceOutput {
+    pub source: SourceInfo,
+    pub region: Rect,
+    pub white_balance: WhiteBalanceMetrics,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WhiteBalanceMetrics {
+    pub rgb_mean: RgbMeans,
+    pub gray_world_gains: RgbGains,
+    pub temperature_bias: String,
+    pub tint_bias: String,
+    pub assessment: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RgbMeans {
+    pub r: f64,
+    pub g: f64,
+    pub b: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RgbGains {
+    pub r: f64,
+    pub g: f64,
+    pub b: f64,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

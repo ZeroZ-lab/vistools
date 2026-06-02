@@ -847,3 +847,51 @@ fn focus_map_schema_snapshot() {
         })
     );
 }
+
+#[test]
+fn white_balance_schema_snapshot() {
+    let actual = run_json(&[
+        "white-balance".to_string(),
+        fixture("64x64.png").display().to_string(),
+    ]);
+
+    assert_eq!(
+        shape(&actual),
+        json!({
+            "ok": "bool",
+            "operation": "string",
+            "input": "string",
+            "data": {
+                "source": {
+                    "width": "number",
+                    "height": "number",
+                    "format": "string",
+                    "size_bytes": "number"
+                },
+                "region": {
+                    "x": "number",
+                    "y": "number",
+                    "width": "number",
+                    "height": "number"
+                },
+                "white_balance": {
+                    "rgb_mean": {
+                        "r": "number",
+                        "g": "number",
+                        "b": "number"
+                    },
+                    "gray_world_gains": {
+                        "r": "number",
+                        "g": "number",
+                        "b": "number"
+                    },
+                    "temperature_bias": "string",
+                    "tint_bias": "string",
+                    "assessment": "string"
+                }
+            },
+            "warnings": [],
+            "elapsed_ms": "number"
+        })
+    );
+}

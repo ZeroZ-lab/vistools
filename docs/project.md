@@ -150,4 +150,4 @@
 |---------|------|------|------|
 | Phase 1: 视野控制命令集 | docs/features/phase1-viewport-commands/ | ⑤sample 已实现 | 4 个视野核心命令 + sample 取色器 + FD1-FD8 |
 | v1: Agent 命令面收敛 | docs/features/v1-agent-command-surface/ | 命令面定义完成 | 视野层 + 测量层 + 断言层，明确 v1 纳入与排除范围 |
-| 摄影计量 | docs/features/photography-metering/ | ⑤P0 build 完成，验收待继续；P1 focus-map 已实现 | P0: histogram --rgb / zone-map / exposure 已实现；按用户明确要求提前实现了 P1 `focus-map`，真实照片验收仍待继续 |
+| 摄影计量 | docs/features/photography-metering/ | ⑤P0 build 完成，验收待继续；P1 focus-map / white-balance 已实现 | P0: histogram --rgb / zone-map / exposure 已实现；按用户明确要求提前实现了 P1 `focus-map`；`white-balance` 已实现灰世界偏色估计，真实照片验收仍待继续 |

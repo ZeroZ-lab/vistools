@@ -272,3 +272,20 @@
   - `ViewportOutput.crop` 从动态 `mode + params` 改为强类型 `CropSpec`
 - 正确性修复：anchor 模式超源图请求时，输出 `crop.region`、实际结果尺寸和 mapping 保持一致
 - 验证：104 tests passed（67 core 单测 + 25 CLI 集成 + 12 schema snapshot），fmt clean，clippy 0 warnings
+
+### 2026-06-02 — 摄影计量 P1 white-balance 详设
+- 触发：用户调用 `forge:detail`，要求进入详设阶段
+- 范围：在既有 `docs/features/photography-metering/` 内扩展 P1，不新开 feature 目录
+- PRD：新增 US-04 focus-map（AC-04-1~4）和 US-05 white-balance（AC-05-1~5）
+- Contract：新增 FD7-FD10，补齐 focus-map 合约并定义 white-balance 灰世界估计
+- 决策：white-balance 输出 RGB 均值、灰世界 gains、warm/cool、green/magenta、assessment；不输出 Kelvin，不生成修正图片
+- 下一步：构建 `vistools white-balance <INPUT> [--rect x,y,width,height]`
+
+### 2026-06-02 — 摄影计量 P1 white-balance 代码生成
+- 触发：用户调用 `forge:codegen`
+- 版本：0.2.4 → 0.2.5
+- 产出：`vistools white-balance <INPUT> [--rect x,y,width,height]`
+- src：新增 `WhiteBalanceOutput` / `WhiteBalanceMetrics` / `RgbMeans` / `RgbGains` 协议类型，新增 `execute_white_balance`
+- tests：新增 core 单测 5 个、CLI 集成测试 2 个、schema snapshot 1 个
+- 对齐：实现覆盖 AC-05-1~5，遵守 FD9 灰世界 gains 和 FD10 不输出 Kelvin
+- 验证：149 tests passed（91 core + 40 integration + 18 schema），clippy 0 warnings，fmt clean
