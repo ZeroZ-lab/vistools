@@ -1,5 +1,6 @@
 pub mod constants;
 pub mod coord;
+pub mod diff;
 pub mod error;
 pub mod geom;
 pub mod guard;

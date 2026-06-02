@@ -895,3 +895,50 @@ fn white_balance_schema_snapshot() {
         })
     );
 }
+
+#[test]
+fn diff_schema_snapshot() {
+    let actual = run_json(&[
+        "diff".to_string(),
+        fixture("64x64.png").display().to_string(),
+        fixture("64x64.png").display().to_string(),
+    ]);
+
+    assert_eq!(
+        shape(&actual),
+        json!({
+            "ok": "bool",
+            "operation": "string",
+            "input": "string",
+            "data": {
+                "expected_source": {
+                    "width": "number",
+                    "height": "number",
+                    "format": "string",
+                    "size_bytes": "number"
+                },
+                "actual_source": {
+                    "width": "number",
+                    "height": "number",
+                    "format": "string",
+                    "size_bytes": "number"
+                },
+                "region": {
+                    "x": "number",
+                    "y": "number",
+                    "width": "number",
+                    "height": "number"
+                },
+                "diff": {
+                    "pixel_count": "number",
+                    "changed_pixels": "number",
+                    "changed_ratio": "number",
+                    "mean_delta": "number",
+                    "max_delta": "number"
+                }
+            },
+            "warnings": [],
+            "elapsed_ms": "number"
+        })
+    );
+}

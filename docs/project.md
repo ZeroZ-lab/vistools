@@ -71,7 +71,7 @@
 | PD2 | 坐标系统 | 统一坐标系 | 原点左上角，x→右，y→下。rect = (x, y, w, h)，percent = 0.0-1.0，anchor = 九宫格语义。所有操作输出包含坐标映射 |
 | PD3 | 文件安全 | Agent-safe | 不覆盖源文件、输出到指定路径、限制最大 tile 数（64）、限制最大像素数（100MP）、错误也返回 JSON |
 | PD4 | 错误处理 | 稳定错误码 | 每种错误有 `error.code`（如 `UNSUPPORTED_FORMAT`），Agent 可 pattern-match |
-| PD5 | 命名规范 | 二进制名 `vistools` | 子命令：inspect / overview / tile / viewport / sample；摄影计量：histogram --rgb / zone-map / exposure / focus-map / white-balance；后续：diff / measure / assert-* |
+| PD5 | 命名规范 | 二进制名 `vistools` | 子命令：inspect / overview / tile / viewport / sample / diff；摄影计量：histogram --rgb / zone-map / exposure / focus-map / white-balance；后续：measure / assert-* |
 | PD6 | 二进制大小 | ≤8MB（Phase 1） | 纯 Rust 无 C 依赖，release LTO + strip。对比 ImageMagick 30-50MB |
 | PD7 | 摄影计量算法 | 纯像素数学，不加新依赖 | Zone System 线性 11 区、EV = log2(luma/118)、灰世界色温估算、手写 sRGB→Lab 变换（~50 行）。不引入 palette 等色彩空间 crate |
 | PD8 | 摄影计量模块归属 | 全部在 photo.rs 内扩展 | 新增 zone-map/exposure/focus-map/white-balance 四个 execute_* 函数 + 色彩工具函数。不加新模块文件 |
@@ -114,7 +114,7 @@
   - `protocol`：`CommandResult<T>` 与对外 JSON DTO
   - `source`：图片加载、metadata、format 推断、像素限制
   - `region`：anchor / percent / rect 解析、clamp、mapping
-  - `inspect` / `overview` / `tile` / `viewport` / `sample` / `photo`：命令语义层（photo 含 sharpness/histogram/clipping/contrast/color-cast/zone-map/exposure/focus-map/white-balance）
+  - `inspect` / `overview` / `tile` / `viewport` / `sample` / `diff` / `photo`：命令语义层（photo 含 sharpness/histogram/clipping/contrast/color-cast/zone-map/exposure/focus-map/white-balance）
 - CLI 内部分层：
   - `main.rs`：顶层命令注册、dispatch、退出码
   - `commands/`：每个命令的 clap 参数与调用适配
@@ -149,5 +149,5 @@
 | Feature | 目录 | 状态 | 说明 |
 |---------|------|------|------|
 | Phase 1: 视野控制命令集 | docs/features/phase1-viewport-commands/ | ⑤sample 已实现 | 4 个视野核心命令 + sample 取色器 + FD1-FD8 |
-| v1: Agent 命令面收敛 | docs/features/v1-agent-command-surface/ | 命令面定义完成 | 视野层 + 测量层 + 断言层，明确 v1 纳入与排除范围 |
+| v1: Agent 命令面收敛 | docs/features/v1-agent-command-surface/ | 命令面定义完成；diff 已实现 | 视野层 + 测量层 + 断言层，明确 v1 纳入与排除范围；`diff` 已补齐第一条 v1 测量原语 |
 | 摄影计量 | docs/features/photography-metering/ | ⑤P0 build 完成，验收待继续；P1 focus-map / white-balance 已实现 | P0: histogram --rgb / zone-map / exposure 已实现；按用户明确要求提前实现了 P1 `focus-map`；`white-balance` 已实现灰世界偏色估计，真实照片验收仍待继续 |

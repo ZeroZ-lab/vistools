@@ -88,6 +88,7 @@ cargo build --release
 | `tile` | 网格切图 | `vistools tile img.png --rows 2 --cols 3 --out-dir ./tiles` |
 | `viewport` | 裁剪区域（3 种模式） | `vistools viewport anchor img.png out.png --anchor center --width 800 --height 600` |
 | `sample` | 点/区域取色 | `vistools sample img.png --x 120 --y 80` |
+| `diff` | 比较两张图的像素差异 | `vistools diff expected.png actual.png` |
 
 ## 命令详解
 
@@ -145,6 +146,18 @@ vistools sample src.png --rect 100,80,40,40
 ```
 
 点模式返回 `rgba`、`rgb`、小写 `hex` 和 `alpha`。区域模式返回四通道平均色、`alpha_stats`（`min`、`max`、`average`、`transparent_ratio`）和 `pixel_count`。`sample` 只读源图，不生成输出图片。
+
+### `diff` — 比较两张图片
+
+```bash
+# 比较整张图片
+vistools diff expected.png actual.png
+
+# 比较两张图中同一源图坐标区域
+vistools diff expected.png actual.png --rect 100,80,400,300
+```
+
+`diff` 只读输入图片，返回 `pixel_count`、`changed_pixels`、`changed_ratio`、`mean_delta`、`max_delta`，以及可选的变化像素 `bounding_rect`。当前最小实现要求两张图尺寸一致，不生成 diff 图片。
 
 ### 摄影计量命令
 

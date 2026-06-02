@@ -352,6 +352,47 @@ fn sample_missing_mode_returns_invalid_parameters() {
 }
 
 // ---------------------------------------------------------------------------
+// diff
+// ---------------------------------------------------------------------------
+
+#[test]
+fn diff_identical_images_success() {
+    bin()
+        .arg("diff")
+        .arg(fixture("64x64.png"))
+        .arg(fixture("64x64.png"))
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("\"operation\": \"diff\""))
+        .stdout(predicates::str::contains("\"changed_pixels\": 0"))
+        .stdout(predicates::str::contains("\"changed_ratio\": 0.0"));
+}
+
+#[test]
+fn diff_mismatched_dimensions_returns_invalid_dimensions() {
+    bin()
+        .arg("diff")
+        .arg(fixture("64x64.png"))
+        .arg(fixture("256x256.png"))
+        .assert()
+        .code(1)
+        .stdout(predicates::str::contains("INVALID_DIMENSIONS"));
+}
+
+#[test]
+fn diff_malformed_rect_returns_invalid_parameters() {
+    bin()
+        .arg("diff")
+        .arg(fixture("64x64.png"))
+        .arg(fixture("64x64.png"))
+        .arg("--rect")
+        .arg("1,2,3")
+        .assert()
+        .code(1)
+        .stdout(predicates::str::contains("INVALID_PARAMETERS"));
+}
+
+// ---------------------------------------------------------------------------
 // photography metrics
 // ---------------------------------------------------------------------------
 

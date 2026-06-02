@@ -27,3 +27,4 @@
 | ⑳ 摄影计量 acceptance | ⏳ 验收方案已定义（真实照片批量验证待执行） |
 | ㉑ 摄影计量 P1 focus-map | ✅ 已实现 NxM 网格锐度矩阵 + best_cell/focus_point + 141 tests |
 | ㉒ 摄影计量 P1 white-balance build | ✅ 已实现灰世界 gains + warm/cool + green/magenta + 149 tests |
+| ㉓ v1 diff build | ✅ 已实现两图像素差异 JSON 统计 + 157 tests |

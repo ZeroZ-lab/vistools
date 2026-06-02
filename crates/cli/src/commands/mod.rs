@@ -1,3 +1,4 @@
+pub mod diff;
 pub mod inspect;
 pub mod overview;
 pub mod photo;

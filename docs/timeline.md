@@ -289,3 +289,13 @@
 - tests：新增 core 单测 5 个、CLI 集成测试 2 个、schema snapshot 1 个
 - 对齐：实现覆盖 AC-05-1~5，遵守 FD9 灰世界 gains 和 FD10 不输出 Kelvin
 - 验证：149 tests passed（91 core + 40 integration + 18 schema），clippy 0 warnings，fmt clean
+
+### 2026-06-02 — v1 diff 代码生成
+- 触发：用户调用 `forge:codegen`
+- 版本：0.2.5 → 0.2.6
+- 说明：缺少专门 `diff` detail/plan，本次从 v1 命令面合约推导最小实现
+- 产出：`vistools diff <EXPECTED> <ACTUAL> [--rect x,y,width,height]`
+- src：新增 `crates/core/src/diff.rs`、`DiffOutput` / `DiffMetrics`、CLI `diff` 子命令
+- tests：新增 core 单测 4 个、CLI 集成测试 3 个、schema snapshot 1 个
+- 边界：同尺寸图片比较；只输出 JSON，不生成 diff 图片
+- 验证：157 tests passed（95 core + 43 integration + 19 schema），clippy 0 warnings，fmt clean

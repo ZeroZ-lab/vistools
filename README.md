@@ -136,6 +136,18 @@ vistools sample src.png --rect 100,80,40,40
 
 Point mode returns `rgba`, `rgb`, lowercase `hex`, and `alpha`. Rect mode returns the rounded average color, `alpha_stats` (`min`, `max`, `average`, `transparent_ratio`), and `pixel_count`. `sample` is read-only and does not create an output image.
 
+### `diff` — compare two images
+
+```bash
+# Compare full images
+vistools diff expected.png actual.png
+
+# Compare the same source-coordinate region in both images
+vistools diff expected.png actual.png --rect 100,80,400,300
+```
+
+`diff` is read-only and returns `pixel_count`, `changed_pixels`, `changed_ratio`, `mean_delta`, `max_delta`, and an optional `bounding_rect` for changed pixels. The initial implementation requires both images to have the same dimensions and does not generate a diff image.
+
 ### Photography metrics
 
 These commands are read-only and return structured JSON for photographic inspection:

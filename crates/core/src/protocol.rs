@@ -374,6 +374,25 @@ pub struct RgbGains {
     pub b: f64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DiffOutput {
+    pub expected_source: SourceInfo,
+    pub actual_source: SourceInfo,
+    pub region: Rect,
+    pub diff: DiffMetrics,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DiffMetrics {
+    pub pixel_count: u64,
+    pub changed_pixels: u64,
+    pub changed_ratio: f64,
+    pub mean_delta: f64,
+    pub max_delta: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bounding_rect: Option<Rect>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
